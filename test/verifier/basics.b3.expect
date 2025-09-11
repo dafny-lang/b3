@@ -48,7 +48,7 @@ Verifying TestTypeUse ...
   =(Inc(k), Inc(12))
 Verifying UseQuantifier ...
 ----- Proof obligation:
-  (forall s: MyString pattern Stringy(s) :: =>(not(=(s, t)), Stringy(s)))
+  (forall s: MyString pattern Stringy(s) =>(not(=(s, t)), Stringy(s)))
   not(=(t, u))
   |-
   Stringy(u)

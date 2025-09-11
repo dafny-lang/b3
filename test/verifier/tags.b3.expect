@@ -1,12 +1,12 @@
 Verifying TestColors ...
 ----- Proof obligation:
-  (forall list: List pattern Length(list) :: <=(0, Length(list)))
+  (forall list: List pattern Length(list) <=(0, Length(list)))
   =(red, Red())
   =(green, Green())
   |-
   not(=(red, green))
 ----- Proof obligation:
-  (forall list: List pattern Length(list) :: <=(0, Length(list)))
+  (forall list: List pattern Length(list) <=(0, Length(list)))
   =(red, Red())
   =(green, Green())
   =(c, Gray(50))
@@ -14,13 +14,13 @@ Verifying TestColors ...
   not(=(red, c))
 Verifying TestLists ...
 ----- Proof obligation:
-  (forall list: List pattern Length(list) :: <=(0, Length(list)))
+  (forall list: List pattern Length(list) <=(0, Length(list)))
   =(a, Nil())
   =(b, Cons(500, list))
   |-
   not(=(a, b))
 ----- Proof obligation:
-  (forall list: List pattern Length(list) :: <=(0, Length(list)))
+  (forall list: List pattern Length(list) <=(0, Length(list)))
   =(a, Nil())
   =(b, Cons(500, list))
   not(=(a, b))

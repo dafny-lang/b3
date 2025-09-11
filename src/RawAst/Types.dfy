@@ -5,17 +5,20 @@ module Types {
 
   const BoolTypeName := "bool"
   const IntTypeName := "int"
-  const BuiltInTypes: set<TypeName> := {BoolTypeName, IntTypeName}
+  const TagTypeName := "tag"
+  const BuiltInTypes: set<TypeName> := {BoolTypeName, IntTypeName, TagTypeName}
 
   datatype Type =
     | BoolType
     | IntType
+    | TagType
     | UserType(decl: TypeDecl)
   {
     function ToString(): string {
       match this
       case BoolType => BoolTypeName
       case IntType => IntTypeName
+      case TagType => TagTypeName
       case UserType(decl) => decl.Name
     }
   }

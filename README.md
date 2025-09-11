@@ -12,6 +12,16 @@ To manage the project from the command line, see the `Makefile`. For example, to
 make verify
 ```
 
+## Test
+
+B3 test depends on [LLVM lit](https://llvm.org/docs/CommandGuide/lit.html) and [OutputCheck](https://pypi.org/project/OutputCheck/). Install them by using the following command and run test suites by `make lit`.
+
+```script
+brew install pipx
+pipx install lit==18.1.8
+pipx install OutputCheck
+```
+
 ## B3 documentation
 
 ### Reference manual

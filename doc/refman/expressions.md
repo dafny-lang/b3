@@ -99,7 +99,7 @@ TODO: description
 QuantifierExpr ::=
   ( forall | exists ) Identifier ":" Type
   Pattern*
-  "::" Expression
+  Expression
 Pattern ::=
   pattern Expression+,
 ```

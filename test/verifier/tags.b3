@@ -28,7 +28,7 @@ function Nil(): List tag ListTag
 function Cons(injective head: int, injective tail: List): List tag ListTag
 
 function Length(list: List): int
-axiom forall list: List pattern Length(list) :: 0 <= Length(list)
+axiom forall list: List pattern Length(list) 0 <= Length(list)
 
 procedure TestLists(list: List) {
   var a := Nil()

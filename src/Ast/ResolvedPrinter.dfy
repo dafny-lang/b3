@@ -14,11 +14,6 @@ module ResolvedPrinter {
       TypeDecl(typ);
     }
 
-    for i := 0 to |b3.taggers| {
-      print "\n";
-      TaggerDecl(b3.taggers[i]);
-    }
-
     for i := 0 to |b3.functions| {
       var func := b3.functions[i];
       print "\n";
@@ -39,10 +34,6 @@ module ResolvedPrinter {
 
   method TypeDecl(decl: Types.TypeDecl) {
     print "type ", decl.Name, "\n";
-  }
-
-  method TaggerDecl(tagger: Tagger) {
-    print "tagger ", tagger.Name, " for ", tagger.ForType.ToString(), "\n";
   }
 
   method FunctionDecl(func: Function) {
@@ -76,9 +67,16 @@ module ResolvedPrinter {
     }
   }
 
-  method AxiomDecl(expr: Expr) {
-    print "axiom ";
-    Expression(expr);
+  method AxiomDecl(axiom: Axiom) {
+    print "axiom";
+    var prefix := " explains ";
+    for i := 0 to |axiom.Explains| {
+      print prefix, axiom.Explains[i].Name;
+      prefix := ", ";
+    }
+    print "\n";
+    Indent(IndentAmount);
+    Expression(axiom.Expr, MultipleLines(IndentAmount));
     print "\n";
   }
 
@@ -208,6 +206,14 @@ module ResolvedPrinter {
     BlockAsStatementList(body, indent, followedByEndCurly);
   }
 
+  method Bindings(prefix: string, vv: seq<Variable>) {
+    var prefix := prefix;
+    for i := 0 to |vv| {
+      IdTypeDecl(prefix, vv[i].name, vv[i].typ);
+      prefix := ", ";
+    }
+  }
+
   method IdTypeDecl(prefix: string, name: string, typ: Types.Type) {
     print prefix, name, ": ", typ.ToString();
   }
@@ -279,7 +285,7 @@ module ResolvedPrinter {
     match expr
     case BLiteral(value) => print value;
     case ILiteral(value) => print value;
-    case CustomLiteral(s, typ) => print "|", s, ": ", typ, "|";
+    case CustomLiteral(s, typ) => print "|", s, ": ", typ.ToString(), "|";
     case IdExpr(v) => print v.name;
     case OperatorExpr(op, args) =>
       if op == Operator.IfThenElse && op.ArgumentCount() == |args| {
@@ -330,20 +336,16 @@ module ResolvedPrinter {
       Expression(rhs);
       format.Space();
       Expression(body, format);
-    case QuantifierExpr(univ, v, patterns, body) =>
-      IdTypeDecl(if univ then "forall " else "exists ", v.name, v.typ);
+    case QuantifierExpr(univ, vv, patterns, body) =>
+      Bindings(if univ then "forall " else "exists ", vv);
       var ind := format.More();
-      if patterns == [] {
-        print " ";
-      } else {
+      if patterns != [] {
         for i := 0 to |patterns| {
           ind.Space();
           print "pattern ";
           ExpressionList(patterns[i].exprs);
         }
-        format.Space();
       }
-      print "::";
       ind.Space();
       Expression(body, ind);
   }

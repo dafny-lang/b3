@@ -2,6 +2,7 @@ module SolverExpr {
   import opened Std.Wrappers
   import Std.Collections.Seq
   import opened Basics
+  import opened DeclarationMarkers
 
   export
     reveals SDeclaration, SDeclaration.name
@@ -14,13 +15,13 @@ module SolverExpr {
     reveals SExpr
     provides SExpr.ToString
     provides SExpr.Boolean, SExpr.Integer, SExpr.EQ, SExpr.Id, SExpr.FuncAppl, SExpr.Eq, SExpr.Negation, SExpr.BigAnd
-    provides Wrappers
+    provides Wrappers, DeclarationMarkers
 
   trait SDeclaration extends object {
     const name: string
   }
 
-  class STypeDecl extends SDeclaration {
+  class STypeDecl extends SDeclaration, DeclarationMarker {
     constructor (name: string) {
       this.name := name;
     }
@@ -55,7 +56,7 @@ module SolverExpr {
     const inputTypes: seq<SType>
   }
 
-  class SConstant extends STypedDeclaration {
+  class SConstant extends STypedDeclaration, DeclarationMarker {
     constructor (name: string, typ: SType) {
       this.name := name;
       this.typ := typ;

@@ -185,7 +185,7 @@ type MyString
 function Stringy(s: MyString): bool
 
 procedure UseQuantifier(t: MyString, u: MyString) {
-  assume forall s: MyString pattern Stringy(s) :: s != t ==> Stringy(s)
+  assume forall s: MyString pattern Stringy(s) s != t ==> Stringy(s)
   if t != u {
     check Stringy(u)
   }
@@ -210,7 +210,7 @@ tagger MyTag for MyClass
 
 function NotStringy(s: MyString): bool
 
-axiom forall s: MyString pattern Stringy(s) pattern NotStringy(s) :: Stringy(s) || NotStringy(s)
+axiom forall s: MyString pattern Stringy(s) pattern NotStringy(s) Stringy(s) || NotStringy(s)
 
 // ------- use of taggers
 

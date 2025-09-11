@@ -28,14 +28,6 @@ module Verifier {
       typeMap := typeMap[typ := t];
     }
 
-    var taggerMap := map[];
-    for i := 0 to |b3.taggers| {
-      var tagger := b3.taggers[i];
-      var forType := I.DeclMappings.Type2STypeWithMap(tagger.ForType, typeMap);
-      var f := new SConstant.Function("_tagger_" + tagger.Name, [forType], I.DeclMappings.Type2STypeWithMap(Types.IntType, typeMap));
-      taggerMap := taggerMap[tagger := f];
-    }
-
     var functionMap := map[];
     for i := 0 to |b3.functions| {
       var func := b3.functions[i];
@@ -44,15 +36,22 @@ module Verifier {
       functionMap := functionMap[func := f];
     }
 
-    var declMap := I.DeclMappings(typeMap, taggerMap, functionMap);
+    var declMap := I.DeclMappings(typeMap, functionMap);
 
-    // Add axioms to context
+    // Add undifferentiated axioms to context (i.e., those axioms that don't explain specific functions).
+    // For the other axioms (i.e., those that explain functions), do the .REval and add them to the axiomMap
     var context := RSolvers.CreateEmptyContext();
     var axiomIncarnations := I.Incarnations.Empty(declMap);
+    var axiomMap := map[];
     for i := 0 to |b3.axioms| {
       var axiom := b3.axioms[i];
-      var cond := axiomIncarnations.REval(axiom);
-      context := RSolvers.Extend(context, cond);
+      assert axiom.WellFormed();
+      var cond := axiomIncarnations.REval(axiom.Expr);
+      if axiom.Explains == [] {
+        context := RSolvers.Extend(context, cond);
+      } else {
+        axiomMap := axiomMap[axiom := cond];
+      }
     }
 
     // Verify each procedure
@@ -60,14 +59,14 @@ module Verifier {
     for i := 0 to |b3.procedures| {
       var proc := b3.procedures[i];
       print "Verifying ", proc.Name, " ...\n";
-      VerifyProcedure(proc, context, declMap, cli);
+      VerifyProcedure(proc, context, declMap, axiomMap, cli);
     }
   }
 
-  method VerifyProcedure(proc: Ast.Procedure, context_in: RSolvers.RContext, declMap: I.DeclMappings, cli: CLI.CliResult)
+  method VerifyProcedure(proc: Ast.Procedure, context_in: RSolvers.RContext, declMap: I.DeclMappings, axiomMap: map<Axiom, RSolvers.RExpr>, cli: CLI.CliResult)
     requires AstValid.Procedure(proc)
   {
-    var smtEngine := RSolvers.CreateEngine(cli);
+    var smtEngine := RSolvers.CreateEngine(axiomMap, cli);
     var preIncarnations, bodyIncarnations, postIncarnations := CreateProcIncarnations(proc.Parameters, declMap);
 
     {

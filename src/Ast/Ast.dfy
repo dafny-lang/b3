@@ -4,17 +4,20 @@ module Ast {
   import Types
   import Raw = RawAst
   import opened Values
+  import opened DeclarationMarkers
 
   export
-    reveals Program, Type, Variable, Expr, Operator, Procedure, Label, Parameter, ParameterMode, AExpr, Stmt, CallArgument, LocalVariable
+    reveals Program, Type, Variable, Procedure, Label, Parameter, LocalVariable
+    reveals Expr, Operator, ParameterMode, AExpr, Stmt, CallArgument
     reveals Program.WellFormed, Procedure.WellFormed, Parameter.WellFormed, AExpr.WellFormed, Stmt.WellFormed, Expr.WellFormed, CallArgument.WellFormed
     reveals CallArgument.CorrespondingMode
     provides Procedure.Name, Procedure.Parameters, Procedure.Pre, Procedure.Post, Procedure.Body
     reveals Procedure.SignatureWellFormed, Procedure.WellFormedHeader
     reveals Function, FParameter, FunctionDefinition
-    provides Function.Name, Function.Parameters, Function.ResultType, Function.Tag, Function.Definition, FParameter.injective
-    reveals Function.SignatureWellFormed, Function.WellFormed, FParameter.WellFormed, FunctionDefinition.WellFormed
-    reveals Tagger, Tagger.Name, Tagger.ForType, Tagger.WellFormed
+    provides Function.Name, Function.Parameters, Function.ResultType, Function.Tag, Function.Definition, Function.ExplainedBy, FParameter.injective
+    reveals Function.SignatureWellFormed, Function.WellFormed, Function.WellFormedAsTagger, FParameter.WellFormed, FunctionDefinition.WellFormed
+    reveals Axiom, Axiom.WellFormed
+    provides Axiom.Explains, Axiom.Expr
     provides Variable.name, Variable.typ
     provides Variable.IsMutable, LocalVariable.IsMutable, Parameter.IsMutable, FParameter.IsMutable
     provides Parameter.mode, Parameter.oldInOut
@@ -26,24 +29,26 @@ module Ast {
     provides Expr.CreateAnd, Expr.CreateBigAnd, Expr.CreateOr, Expr.CreateBigOr
     reveals Pattern, Pattern.WellFormed
     provides CustomLiteralToString
-    provides Raw, Types, Wrappers
+    provides Raw, Types, Wrappers, DeclarationMarkers
 
   type Type = Types.Type
 
-  datatype Program = Program(types: seq<Types.TypeDecl>, taggers: seq<Tagger>, functions: seq<Function>, axioms: seq<Expr>, procedures: seq<Procedure>)
+  datatype Program = Program(types: seq<Types.TypeDecl>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
   {
     predicate WellFormed()
       reads procedures, functions
     {
-      // axioms are well-formed
-      && (forall axiom <- axioms :: axiom.WellFormed())
-
       // type declarations have distinct names
       && (forall typ0 <- types, typ1 <- types :: typ0.Name == typ1.Name ==> typ0 == typ1)
+
       // function declarations have distinct names
       && (forall func0 <- functions, func1 <- functions :: func0.Name == func1.Name ==> func0 == func1)
       // function are well-formed
       && (forall func <- functions :: func.WellFormed())
+
+      // axioms are well-formed
+      && (forall axiom <- axioms :: axiom.WellFormed())
+
       // procedure declarations have distinct names
       && (forall proc0 <- procedures, proc1 <- procedures :: proc0.Name == proc1.Name ==> proc0 == proc1)
       // procedures are well-formed
@@ -128,37 +133,24 @@ module Ast {
 
   type ParameterMode = Raw.ParameterMode
 
-  class Tagger {
-    const Name: string
-    const ForType: Type
-
-    constructor (name: string, forType: Type)
-      ensures Name == name && ForType == forType
-    {
-      Name := name;
-      ForType := forType;
-    }
-
-    predicate WellFormed() {
-      true
-    }
-  }
-
-  class Function {
+  class Function extends DeclarationMarker {
     const Name: string
     const Parameters: seq<FParameter>
     const ResultType: Type
-    const Tag: Option<Tagger>
+    const Tag: Option<Function>
     var Definition: Option<FunctionDefinition>
+    var ExplainedBy: seq<Axiom>
 
-    constructor (name: string, parameters: seq<FParameter>, resultType: Type, maybeTag: Option<Tagger>)
+    constructor (name: string, parameters: seq<FParameter>, resultType: Type, maybeTag: Option<Function>)
       ensures Name == name && Parameters == parameters && ResultType == resultType && Tag == maybeTag && Definition == None
+      ensures ExplainedBy == []
     {
       Name := name;
       Parameters := parameters;
       ResultType := resultType;
       Tag := maybeTag;
       Definition := None;
+      ExplainedBy := [];
     }
 
     ghost predicate SignatureWellFormed(func: Raw.Function) {
@@ -170,7 +162,7 @@ module Ast {
       && (forall i :: 0 <= i < |Parameters| ==> Parameters[i].injective == func.parameters[i].injective)
       && (forall i :: 0 <= i < |Parameters| ==> Parameters[i].WellFormed())
       && (if func.tag == None then Tag == None else Tag.Some? && Tag.value.Name == func.tag.value)
-      && (Tag.Some? ==> Tag.value.ForType == ResultType)
+      && (Tag.Some? ==> var tagger := Tag.value; |tagger.Parameters| == 1 && tagger.Parameters[0].typ == ResultType)
     }
 
     predicate WellFormed()
@@ -179,7 +171,15 @@ module Ast {
       && (forall i :: 0 <= i < |Parameters| ==> Parameters[i].WellFormed())
       && (forall i, j :: 0 <= i < j < |Parameters| ==> Parameters[i].name != Parameters[j].name)
       && (Definition == None || Definition.value.WellFormed())
-      && (Tag.Some? ==> Tag.value.ForType == ResultType)
+      && (Tag.Some? ==> var tagger := Tag.value; |tagger.Parameters| == 1 && tagger.Parameters[0].typ == ResultType)
+    }
+
+    predicate WellFormedAsTagger()
+      reads this
+    {
+      && WellFormed()
+      && |Parameters| == 1
+      && ResultType == Types.TagType
     }
   }
 
@@ -188,7 +188,7 @@ module Ast {
     predicate WellFormed() {
       && (forall e <- when :: e.WellFormed())
       && (body.WellFormed())
-      // TODO: make sure free variables of when/body are the expected ones
+      // TODO: make sure free/bound variables of when/body are the expected ones
     }
   }
 
@@ -211,6 +211,22 @@ module Ast {
 
     function DeclToString(): string {
       (if injective then "injective " else "") + name + ": " + typ.ToString()
+    }
+  }
+
+  class Axiom extends DeclarationMarker {
+    const Explains: seq<Function>
+    const Expr: Expr
+
+    constructor (explains: seq<Function>, expr: Expr)
+      ensures Explains == explains && Expr == expr
+    {
+      this.Explains := explains;
+      this.Expr := expr;
+    }
+
+    predicate WellFormed() {
+      Expr.WellFormed()
     }
   }
 
@@ -330,7 +346,7 @@ module Ast {
     | FunctionCallExpr(func: Function, args: seq<Expr>)
     | LabeledExpr(lbl: Label, body: Expr)
     | LetExpr(v: Variable, rhs: Expr, body: Expr)
-    | QuantifierExpr(univ: bool, v: Variable, patterns: seq<Pattern>, body: Expr)
+    | QuantifierExpr(univ: bool, vv: seq<Variable>, patterns: seq<Pattern>, body: Expr)
   {
     function ExprType(): Type {
       match this
@@ -375,7 +391,8 @@ module Ast {
         body.WellFormed()
       case LetExpr(_, rhs, body) =>
         rhs.WellFormed() && body.WellFormed()
-      case QuantifierExpr(_, _, patterns, body) =>
+      case QuantifierExpr(_, vv, patterns, body) =>
+        // SOON: && (forall i, j :: 0 <= i < j < |vv| ==> vv[i].name != vv[j].name)
         && (forall tr <- patterns :: tr.WellFormed())
         && body.WellFormed()
     }
@@ -407,12 +424,18 @@ module Ast {
         ParenthesisWrap(opStrength <= contextStrength,
           v.DeclToString() + " := " + rhs.ToString() + " " + body.ToString(opStrength)
         )
-      case QuantifierExpr(univ, v, patterns, body) =>
+      case QuantifierExpr(univ, vv, patterns, body) =>
         var opStrength := Operator.EndlessOperatorBindingStrength;
         ParenthesisWrap(opStrength <= contextStrength,
           var opStrength := Operator.EndlessOperatorBindingStrength;
-          (if univ then "forall " else "exists ") + v.DeclToString() + Pattern.ListToString(patterns) + " :: " + body.ToString(opStrength)
+          (if univ then "forall " else "exists ") +
+          DeclsToString(vv) +
+          Pattern.ListToString(patterns) + " " + body.ToString(opStrength)
         )
+    }
+
+    static function DeclsToString(vv: seq<Variable>): string {
+      Comma(SeqMap(vv, (v: Variable) => v.DeclToString()), ", ")
     }
 
     static function ListToString(exprs: seq<Expr>): string {
@@ -452,7 +475,7 @@ module Ast {
     static function CreateForall(v: Variable, body: Expr): (r: Expr)
       requires body.WellFormed()
       ensures r.WellFormed()
-    { QuantifierExpr(true, v, [], body) }
+    { QuantifierExpr(true, [v], [], body) }
 
     static function CreateAnd(e0: Expr, e1: Expr): (r: Expr)
       requires e0.WellFormed() && e1.WellFormed()

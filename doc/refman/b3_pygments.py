@@ -36,6 +36,7 @@ b3_types = (
 b3_modifier = (
     'for',
     'injective', 'tag', 'when',
+    'explains',
     'inout', 'out', 'requires', 'ensures',
     'invariant',
     'pattern',

@@ -11,3 +11,5 @@ test/**/Output
 /.vscode
 /test/.lit_test_times.txt
 /doc/refman/_build
+/target/java/bin
+/target/cs/test

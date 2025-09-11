@@ -22,9 +22,11 @@ module TypeChecker {
     }
 
     for n := 0 to |b3.axioms|
-      invariant forall axiom <- b3.axioms[..n] :: TypeCorrectExpr(axiom) && axiom.HasType(BoolType)
+      invariant forall axiom <- b3.axioms[..n] :: TypeCorrectAxiom(axiom)
     {
-      :- TypeCheckAs(b3.axioms[n], BoolType);
+      var axiom := b3.axioms[n];
+      assert axiom.WellFormed();
+      :- TypeCheckAs(axiom.Expr, BoolType);
     }
 
     for n := 0 to |b3.procedures|
@@ -41,7 +43,7 @@ module TypeChecker {
     reads b3.functions, b3.procedures
   {
     && (forall func <- b3.functions :: TypeCorrectFunction(func))
-    && (forall axiom <- b3.axioms :: TypeCorrectExpr(axiom) && axiom.HasType(BoolType))
+    && (forall axiom <- b3.axioms :: TypeCorrectAxiom(axiom))
     && (forall proc <- b3.procedures :: TypeCorrectProc(proc))
   }
 
@@ -55,6 +57,12 @@ module TypeChecker {
       && (forall e <- def.when :: TypeCorrectExpr(e) && e.HasType(BoolType))
       && TypeCorrectExpr(def.body)
       && def.body.HasType(func.ResultType)
+  }
+
+  predicate TypeCorrectAxiom(axiom: Axiom)
+    requires axiom.WellFormed()
+  {
+    TypeCorrectExpr(axiom.Expr) && axiom.Expr.HasType(BoolType)
   }
 
   predicate TypeCorrectProc(proc: Procedure)

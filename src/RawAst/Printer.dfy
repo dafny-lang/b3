@@ -68,9 +68,16 @@ module Printer {
     }
   }
 
-  method AxiomDecl(expr: Expr) {
-    print "axiom ";
-    Expression(expr);
+  method AxiomDecl(axiom: Axiom) {
+    print "axiom";
+    var prefix := " explains ";
+    for i := 0 to |axiom.explains| {
+      print prefix, axiom.explains[i];
+      prefix := ", ";
+    }
+    print "\n";
+    Indent(IndentAmount);
+    Expression(axiom.expr, MultipleLines(IndentAmount));
     print "\n";
   }
 
@@ -235,6 +242,14 @@ module Printer {
     BlockAsStatementList(body, indent, followedByEndCurly);
   }
 
+  method Bindings(prefix: string, bindings: seq<Binding>) {
+    var prefix := prefix;
+    for i := 0 to |bindings| {
+      IdTypeDecl(prefix, bindings[i].name, Some(bindings[i].typ));
+      prefix := ", ";
+    }
+  }
+
   method IdTypeDecl(prefix: string, name: string, optionalType: Option<Types.TypeName>) {
     print prefix, name;
     match optionalType
@@ -360,20 +375,16 @@ module Printer {
       Expression(rhs);
       format.Space();
       Expression(body, format);
-    case QuantifierExpr(univ, name, typ, patterns, body) =>
-      IdTypeDecl(if univ then "forall " else "exists ", name, Some(typ));
+    case QuantifierExpr(univ, bindings, patterns, body) =>
+      Bindings(if univ then "forall " else "exists ", bindings);
       var ind := format.More();
-      if patterns == [] {
-        print " ";
-      } else {
+      if patterns != [] {
         for i := 0 to |patterns| {
           ind.Space();
           print "pattern ";
           ExpressionList(patterns[i].exprs);
         }
-        format.Space();
       }
-      print "::";
       ind.Space();
       Expression(body, ind);
   }

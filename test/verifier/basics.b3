@@ -185,7 +185,7 @@ type MyString
 function Stringy(s: MyString): bool
 
 procedure UseQuantifier(t: MyString, u: MyString) {
-  assume forall s: MyString pattern Stringy(s) :: s != t ==> Stringy(s)
+  assume forall s: MyString pattern Stringy(s) s != t ==> Stringy(s)
   if t != u {
     check Stringy(u)
   }

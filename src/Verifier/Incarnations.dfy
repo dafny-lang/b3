@@ -18,7 +18,7 @@ module Incarnations {
 
   type RExpr = RSolvers.RExpr
 
-  datatype DeclMappings = DeclMappings(typeMap: map<Types.TypeDecl, STypeDecl>, taggerMap: map<Tagger, STypedDeclaration>, functionMap: map<Function, STypedDeclaration>)
+  datatype DeclMappings = DeclMappings(typeMap: map<Types.TypeDecl, STypeDecl>, functionMap: map<Function, STypedDeclaration>)
   {
     function Type2SType(typ: Type): SType {
       Type2STypeWithMap(typ, typeMap)
@@ -27,12 +27,22 @@ module Incarnations {
     static function Type2STypeWithMap(typ: Type, typeMap: map<Types.TypeDecl, STypeDecl>): SType {
       match typ
       case BoolType => SBool
-      case IntType => SInt
+      case IntType | TagType => SInt
       case UserType(decl) =>
-        assume {:axiom} decl in typeMap;
+        var _ := Expect(decl in typeMap, decl.Name);
         var sTypeDecl := typeMap[decl];
         SUserType(sTypeDecl)
     }
+  }
+
+  function Expect(b: bool, msg: string): ()
+    ensures b
+  {
+    assume {:axiom} b;
+    ()
+  } by method {
+    expect b, msg;
+    return ();
   }
 
   datatype Incarnations = Incarnations(nextSequenceCount: map<string, nat>, m: map<Variable, SConstant>, declMap: DeclMappings)
@@ -54,7 +64,7 @@ module Incarnations {
     }
 
     function Get(v: Variable): SConstant {
-      assume {:axiom} v in m; // TODO
+      var _ := Expect(v in m, v.name);
       m[v]
     }
 
@@ -122,10 +132,13 @@ module Incarnations {
         var sVar;
         r, sVar := Update(v);
         r := r.CreateForBoundVariables(body);
-      case QuantifierExpr(_, v, patterns, body) =>
-        expect v !in r.m.Keys;
-        var sVar;
-        r, sVar := Update(v);
+      case QuantifierExpr(_, vv, patterns, body) =>
+        expect forall v <- vv :: v !in r.m.Keys;
+        r := this;
+        for i := 0 to |vv| {
+          var sVar;
+          r, sVar := r.Update(vv[i]);
+        }
         for i := 0 to |patterns| {
           var pattern := patterns[i];
           for j := 0 to |pattern.exprs| {
@@ -145,7 +158,7 @@ module Incarnations {
     }
 
     function SubstituteVariable(v: Variable): SConstant {
-      assume {:axiom} v in m; // TODO
+      var _ := Expect(v in m, v.name);
       m[v]
     }
 
@@ -172,28 +185,22 @@ module Incarnations {
         }
       case FunctionCallExpr(func, args) =>
         var rArgs := SubstituteList(args);
-        assume {:axiom} func in declMap.functionMap;
+        var _ := Expect(func in declMap.functionMap, func.Name);
         var f := declMap.functionMap[func];
-        var t := match func.Tag {
-          case None => None
-          case Some(tagger) =>
-            assume {:axiom} tagger in declMap.taggerMap;
-            Some(declMap.taggerMap[tagger])
-        };
-        RExpr.FuncAppl(RSolvers.UserDefinedFunction(f, t), rArgs)
+        RExpr.FuncAppl(RSolvers.UserDefinedFunction(func, f, None), rArgs)
       case LabeledExpr(_, body) =>
         // TODO: do something with the label
         Substitute(body)
       case LetExpr(v, rhs, body) =>
-        assume {:axiom} v in m;
+        var _ := Expect(v in m, v.name);
         var sVar := m[v];
         RExpr.LetExpr(sVar, Substitute(rhs), Substitute(body))
-      case QuantifierExpr(univ, v, patterns, body) =>
-        assume {:axiom} v in m;
-        var sVar := m[v];
+      case QuantifierExpr(univ, vv, patterns, body) =>
+        var _ := Expect(forall v <- vv :: v in m, "quantifier-vars");
+        var sVars := SeqMap(vv, v requires v in m => m[v]);
         var trs := SubstitutePatterns(patterns);
         var b := Substitute(body);
-        RExpr.QuantifierExpr(univ, [sVar], trs, b)
+        RExpr.QuantifierExpr(univ, sVars, trs, b)
     }
 
     function SubstituteList(exprs: seq<Expr>): seq<RSolvers.RExpr>

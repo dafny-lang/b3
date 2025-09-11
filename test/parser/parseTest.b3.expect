@@ -75,9 +75,16 @@ function Nil(): List tag ListTag
 
 function Cons(injective head: int, injective tail: List): List tag ListTag
 
-axiom true ==> 5 < 7
+axiom
+  true ==>
+  5 < 7
 
-axiom forall s: MyString pattern Stringy(s) pattern NotStringy(s) :: Stringy(s) || NotStringy(s)
+axiom
+  forall s: MyString
+    pattern Stringy(s)
+    pattern NotStringy(s)
+    Stringy(s) ||
+    NotStringy(s)
 
 procedure Test(x: int)
 
@@ -236,7 +243,7 @@ procedure TestTypeUse(y: Abc)
 
 procedure UseQuantifier(t: MyString, u: MyString)
 {
-  assume forall s: MyString pattern Stringy(s) :: s != t ==> Stringy(s)
+  assume forall s: MyString pattern Stringy(s) s != t ==> Stringy(s)
   if t != u {
     check Stringy(u)
   }

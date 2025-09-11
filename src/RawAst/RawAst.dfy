@@ -6,7 +6,7 @@ module RawAst {
   // Top-level program
 
   // A raw program reflects program that has been parsed.
-  datatype Program = Program(types: seq<TypeName>, taggers: seq<Tagger>, functions: seq<Function>, axioms: seq<Expr>, procedures: seq<Procedure>)
+  datatype Program = Program(types: seq<TypeName>, taggers: seq<Tagger>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
   {
     // A raw program is well-formed when its identifiers resolve to declarations and some basic
     // properties hold:
@@ -89,6 +89,15 @@ module RawAst {
       && (forall e <- when :: e.WellFormed(b3, whenScope))
       // body is well-formed
       && (body.WellFormed(b3, bodyScope))
+    }
+  }
+
+  // Axioms
+
+  datatype Axiom = Axiom(explains: seq<string>, expr: Expr)
+  {
+    predicate WellFormed(b3: Program, scope: Scope) {
+      expr.WellFormed(b3, scope)
     }
   }
 
@@ -413,7 +422,7 @@ module RawAst {
     | FunctionCallExpr(name: string, args: seq<Expr>)
     | LabeledExpr(name: string, expr: Expr)
     | LetExpr(name: string, optionalType: Option<TypeName>, rhs: Expr, body: Expr)
-    | QuantifierExpr(univ: bool, name: string, typ: TypeName, patterns: seq<Pattern>, body: Expr)
+    | QuantifierExpr(univ: bool, bindings: seq<Binding>, patterns: seq<Pattern>, body: Expr)
   {
     predicate WellFormed(b3: Program, scope: Scope) {
       match this
@@ -432,12 +441,14 @@ module RawAst {
       case LetExpr(name, typ, rhs, body) =>
         && rhs.WellFormed(b3, scope)
         && body.WellFormed(b3, scope + {name})
-      case QuantifierExpr(_, name, typ, patterns, body) =>
-        var scope' := scope + {name};
+      case QuantifierExpr(_, bindings, patterns, body) =>
+        var scope' := scope + set binding <- bindings :: binding.name;
         && (forall tr <- patterns :: tr.WellFormed(b3, scope'))
         && body.WellFormed(b3, scope')
     }
   }
+
+  datatype Binding = Binding(name: string, typ: TypeName)
 
   datatype Pattern = Pattern(exprs: seq<Expr>) {
     predicate WellFormed(b3: Program, scope: Scope) {

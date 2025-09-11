@@ -54,7 +54,8 @@ FParameter ::=
 
 ```
 Axiom ::=
-  axiom Expression
+  axiom [ explains Identifier+, ]
+    Expression
 ```
 
 ## Procedures

@@ -1,12 +1,31 @@
-module Z3SmtSolver {
-  import opened Smt
+module ExternalSolvers {
+  import opened Basics
+  import Smt
+  import Z3SmtSolver
+
+  export
+    reveals ExternalSolver
+    provides Create
+    provides Smt, Basics
+
+  datatype ExternalSolver = Z3 // soon:  | CVC5
+
+  method Create(which: ExternalSolver, printLog: bool) returns (smtEngine: Smt.SolverEngine)
+    ensures !smtEngine.Disposed()
+    ensures smtEngine.CommandStacks() == Cons(Nil, Nil)
+    ensures fresh(smtEngine) && fresh(smtEngine.process)
+  {
+    var process;
+    match which {
+      case Z3 => process := Z3SmtSolver.CreateZ3Process();
+    }
+    smtEngine := new Smt.SolverEngine(process, printLog);
+  }
 
   @Test
-  method DemonstrateZ3() {
-    // Create Z3 solver
-    var z3 := CreateZ3SolverEngine(false);
+  method DemonstrateExternalSolver() {
+    var z3 := Create(ExternalSolver.Z3, false);
     
-
     z3.DeclareFunction("x", "()", "Int");
 
     z3.Push();
@@ -56,19 +75,14 @@ module Z3SmtSolver {
     // Clean up
     z3.Dispose();
   }
+}
+
+module Z3SmtSolver {
+  import Smt
 
   // Factory method to create a Z3 solver instance
   @Axiom
   method {:extern} CreateZ3Process() returns (process: Smt.SmtProcess)
     ensures !process.Disposed()
     ensures fresh(process)
-  
-  method CreateZ3SolverEngine(printLog: bool) returns (smtEngine: SolverEngine)
-    ensures !smtEngine.Disposed()
-    ensures smtEngine.CommandStacks() == Basics.Cons(Basics.Nil, Basics.Nil)
-    ensures fresh(smtEngine) && fresh(smtEngine.process)
-  {
-    var process := CreateZ3Process();
-    smtEngine := new SolverEngine(process, printLog);
-  }
 }
