@@ -167,6 +167,9 @@ module TypeChecker {
     case QuantifierExpr(_, _, patterns, body) =>
       (forall tr <- patterns, e <- tr.exprs :: assert tr.WellFormed(); TypeCorrectExpr(e)) &&
       TypeCorrectExpr(body) && body.HasType(BoolType)
+    case ClosureExpr(_, _, _, _) =>
+      // Closures must be elaborated before type checking
+      false
   }
 
   method CheckFunction(func: Function) returns (outcome: Outcome<string>)
@@ -399,6 +402,8 @@ module TypeChecker {
         return Failure("body of quantifier expression must have type " + BoolTypeName + ", got " + typ.ToString());
       }
       return Success(typ);
+    case ClosureExpr(_, _, _, _) =>
+      return Failure("closure must be elaborated before type checking");
   }
 
   method CheckExprList(exprs: seq<Expr>) returns (r: Result<seq<Type>, string>)

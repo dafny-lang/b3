@@ -1,0 +1,19 @@
+// RUN: b3 parse %s
+
+// Closure binding with multiple parameters
+function F(x: int, y: int, z: int): int
+
+procedure TestMultipleParams()
+{
+  var a: int
+  var b: int
+  
+  // Closure with binding that has multiple parameters
+  var result := lift
+    %compute(x: int, y: int, z: int) := F(x + a, y * b, z)
+  into
+    %r: int
+  by {
+    %r == %compute(1, 2, 3)
+  }
+}

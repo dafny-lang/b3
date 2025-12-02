@@ -447,6 +447,7 @@ module RawAst {
     | LabeledExpr(name: string, expr: Expr)
     | LetExpr(name: string, optionalType: Option<TypeName>, rhs: Expr, body: Expr)
     | QuantifierExpr(univ: bool, bindings: seq<Binding>, patterns: seq<Pattern>, body: Expr)
+    | ClosureExpr(closureBindings: seq<ClosureBinding>, resultVar: string, resultType: TypeName, properties: seq<ClosureProperty>)
   {
     predicate WellFormed(b3: Program, scope: Scope) {
       match this
@@ -470,6 +471,10 @@ module RawAst {
         var scope' := scope + set binding <- bindings :: binding.name;
         && (forall tr <- patterns :: tr.WellFormed(b3, scope'))
         && body.WellFormed(b3, scope')
+      case ClosureExpr(closureBindings, resultVar, resultType, properties) =>
+        && b3.IsType(resultType)
+        && (forall b <- closureBindings :: b.WellFormed(b3, scope))
+        && (forall p <- properties :: p.WellFormed(b3, scope, closureBindings))
     }
   }
 
@@ -478,6 +483,26 @@ module RawAst {
   datatype Pattern = Pattern(exprs: seq<Expr>) {
     predicate WellFormed(b3: Program, scope: Scope) {
       forall e <- exprs :: e.WellFormed(b3, scope)
+    }
+  }
+
+  datatype ClosureBinding = ClosureBinding(name: string, params: seq<Binding>, rhs: Expr)
+  {
+    predicate WellFormed(b3: Program, scope: Scope) {
+      var bindingScope := scope + set p <- params :: p.name;
+      && (forall p <- params :: LegalVariableName(p.name) && b3.IsType(p.typ))
+      && rhs.WellFormed(b3, bindingScope)
+    }
+  }
+
+  datatype ClosureProperty = ClosureProperty(triggers: seq<Pattern>, body: Expr)
+  {
+    predicate WellFormed(b3: Program, scope: Scope, bindings: seq<ClosureBinding>) {
+      // Properties can reference closure binding parameters
+      var bindingParams := set b <- bindings, p <- b.params :: p.name;
+      var propertyScope := scope + bindingParams;
+      && (forall tr <- triggers :: tr.WellFormed(b3, propertyScope))
+      && body.WellFormed(b3, propertyScope)
     }
   }
 }

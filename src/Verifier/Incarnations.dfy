@@ -166,6 +166,9 @@ module Incarnations {
           }
         }
         r := r.CreateForBoundVariables(body);
+      case ClosureExpr(_, _, _, _) =>
+        // Closures must be elaborated before verification
+        expect false;
     }
 
     // Create SConstant's for the bound variables in "expr" and then substitute these and the other incarnations
@@ -221,6 +224,10 @@ module Incarnations {
         var trs := SubstitutePatterns(patterns);
         var b := Substitute(body);
         RExpr.QuantifierExpr(univ, sVars, trs, b)
+      case ClosureExpr(_, _, _, _) =>
+        // Closures must be elaborated before verification
+        var _ := Expect(false, "closure-not-elaborated");
+        RExpr.Boolean(false)  // unreachable
     }
 
     function SubstituteList(exprs: seq<Expr>): seq<RSolvers.RExpr>

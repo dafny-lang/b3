@@ -1,0 +1,15 @@
+// RUN: b3 parse %s
+
+// Edge case: closure with no properties
+procedure TestNoProperties()
+{
+  var x: int
+  
+  // Closure with no properties (edge case)
+  var result := lift
+    %val := x
+  into
+    %r: int
+  by {
+  }
+}

@@ -134,7 +134,7 @@ module Parser {
       .I_I(W1).M2(MId, StringConcat).Rep()
     ).M((wsMore: (string, seq<string>)) => wsMore.0 + Seq.Join(Seq.Map(MId, wsMore.1), ""))
 
-  const canStartIdentifierChar := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  const canStartIdentifierChar := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ%"
   const identifierChar := canStartIdentifierChar + "0123456789_$."
   const customLiteralChar := identifierChar + "+-*/@#!^"
 
@@ -529,8 +529,44 @@ module Parser {
           )
         )
       ),
+      T("lift").e_I(parseClosure(c)),
       parseAtomicExpr(c)
     ])
+  }
+
+  function parseClosure(c: ExprRecSel): B<Expr> {
+    parseNonemptyCommaDelimitedSeq(parseClosureBinding(c)).Then(bindings =>
+      T("into").e_I(parseId).Then(resultVar =>
+        Sym(":").e_I(parseType).Then(resultType =>
+          T("by").e_I(Sym("{")).e_I(parseCommaDelimitedSeq(parseClosureProperty(c))).I_e(Sym("}")).M(properties =>
+            ClosureExpr(bindings, resultVar, resultType, properties)
+          )
+        )
+      )
+    )
+  }
+
+  function parseClosureBinding(c: ExprRecSel): B<ClosureBinding> {
+    parseId.Then(name =>
+      parseParenthesized(parseCommaDelimitedSeq(parseIdType.M2(MId, (n: string, t: Types.TypeName) => Binding(n, t)))).Option().Then((maybeParams: Option<seq<Binding>>) =>
+        Sym(":=").e_I(c("expr")).M(rhs =>
+          var params: seq<Binding> := match maybeParams case Some(p) => p case None => [];
+          ClosureBinding(name, params, rhs)
+        )
+      )
+    )
+  }
+
+  function parseClosureProperty(c: ExprRecSel): B<ClosureProperty> {
+    parseClosureTrigger(c).Rep().Then(triggers =>
+      (if |triggers| > 0 then Sym("::").M(_ => ()) else Nothing.M(_ => ())).e_I(c("expr")).M(body =>
+        ClosureProperty(triggers, body)
+      )
+    )
+  }
+
+  function parseClosureTrigger(c: ExprRecSel): B<Pattern> {
+    T("trigger").e_I(parseNonemptyCommaDelimitedSeq(c("expr"))).M(exprs => Pattern(exprs))
   }
 
   function parsePattern(c: ExprRecSel): B<Pattern> {

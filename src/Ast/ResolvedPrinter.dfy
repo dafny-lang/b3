@@ -385,6 +385,9 @@ module ResolvedPrinter {
       ind.Space();
       Expression(body, opStrength.SubexpressionPower(Side.Right, context), format := ind);
       Parenthesis(Side.Right, opStrength, context);
+    case ClosureExpr(_, _, _, _) =>
+      // Closures must be elaborated before printing
+      print "<closure-not-elaborated>";
   }
 
   method ExpressionList(exprs: seq<Expr>) {

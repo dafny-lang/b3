@@ -1,0 +1,19 @@
+// RUN: b3 parse %s
+
+// Closure with multiple triggers in a property
+function F(x: int): int
+function G(x: int): int
+
+procedure TestMultipleTriggers()
+{
+  var x: int
+  
+  // Closure with property that has multiple triggers
+  var result := lift
+    %val := x
+  into
+    %r: int
+  by {
+    trigger F(%r) trigger G(%r) :: F(%r) == G(%r)
+  }
+}

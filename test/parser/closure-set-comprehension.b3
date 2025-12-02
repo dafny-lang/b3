@@ -1,0 +1,23 @@
+// RUN: b3 parse %s
+
+// Set comprehension example from the spec
+function SetContains(s: Set, x: Box): bool
+function Box(x: int): Box
+function Unbox(x: Box): int
+function Abs(x: int): int
+
+procedure TestSetComprehension()
+{
+  var e0: int
+  var e1: int
+  
+  // Closure for set comprehension: set x | Abs(x - e0) + e1
+  var s := lift
+    %body(x: int) := Abs(x - e0) + e1
+  into
+    %s: Set
+  by {
+    forall bx: Box trigger SetContains(%s, bx) ::
+      SetContains(%s, bx) <==> %body(Unbox(bx))
+  }
+}

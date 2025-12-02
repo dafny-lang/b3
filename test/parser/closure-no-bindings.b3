@@ -1,0 +1,15 @@
+// RUN: b3 parse %s
+
+// Edge case: closure with no bindings
+function F(): int
+
+procedure TestNoBindings()
+{
+  // Closure with no bindings (edge case)
+  var x := lift
+  into
+    %result: int
+  by {
+    F() == 42
+  }
+}

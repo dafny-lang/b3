@@ -421,6 +421,41 @@ module Printer {
       ind.Space();
       Expression(body, opStrength.SubexpressionPower(Side.Right, context), format := ind);
       Parenthesis(Side.Right, opStrength, context);
+    case ClosureExpr(closureBindings, resultVar, resultType, properties) =>
+      print "lift ";
+      var sep := "";
+      for i := 0 to |closureBindings| {
+        print sep;
+        sep := ", ";
+        var binding := closureBindings[i];
+        print binding.name;
+        if |binding.params| > 0 {
+          print "(";
+          Bindings("", binding.params);
+          print ")";
+        }
+        print " := ";
+        Expression(binding.rhs);
+      }
+      print " into ";
+      print resultVar, ": ", resultType;
+      print " by { ";
+      sep := "";
+      for i := 0 to |properties| {
+        print sep;
+        sep := ", ";
+        var prop := properties[i];
+        for j := 0 to |prop.triggers| {
+          print "trigger ";
+          ExpressionList(prop.triggers[j].exprs);
+          print " ";
+        }
+        if |prop.triggers| > 0 {
+          print ":: ";
+        }
+        Expression(prop.body);
+      }
+      print " }";
   }
 
   method ExpressionList(exprs: seq<Expr>) {

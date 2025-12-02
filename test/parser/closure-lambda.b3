@@ -1,0 +1,26 @@
+// RUN: b3 parse %s
+
+// Closure with lambda-like binding from the spec
+function SeqLength(s: Sequence): int
+function SeqIndex(s: Sequence, i: int): Box
+function Box(x: int): Box
+function Abs(x: int): int
+
+procedure TestClosureLambda()
+{
+  var n: int
+  var e0: int
+  var e1: int
+  
+  // Closure expression: sequence constructor with lambda
+  var s := lift
+    %len := n,
+    %elements(i: int) := Abs(i - e0) + e1
+  into
+    %s: Sequence
+  by {
+    trigger SeqLength(%s) :: 0 <= %len ==> SeqLength(%s) == %len,
+    forall j: int trigger SeqIndex(%s, j) ::
+      0 <= j && j < %len ==> SeqIndex(%s, j) == Box(%elements(j))
+  }
+}

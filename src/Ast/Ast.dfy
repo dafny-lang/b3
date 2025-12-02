@@ -35,6 +35,8 @@ module Ast {
     provides Expr.CreateTrue, Expr.CreateFalse, Expr.CreateNegation, Expr.CreateLet, Expr.CreateForall
     provides Expr.CreateAnd, Expr.CreateBigAnd, Expr.CreateOr, Expr.CreateBigOr
     reveals Pattern, Pattern.WellFormed
+    reveals ClosureBinding, ClosureBinding.WellFormed
+    reveals ClosureProperty, ClosureProperty.WellFormed
     provides Raw, Types, Wrappers, DeclarationMarkers, PrintUtil
 
   trait NamedDecl extends object {
@@ -399,6 +401,7 @@ module Ast {
     | LabeledExpr(lbl: Label, body: Expr)
     | LetExpr(v: Variable, rhs: Expr, body: Expr)
     | QuantifierExpr(univ: bool, vv: seq<Variable>, patterns: seq<Pattern>, body: Expr)
+    | ClosureExpr(closureBindings: seq<ClosureBinding>, resultVar: string, resultType: Type, properties: seq<ClosureProperty>)
   {
     function ExprType(): Type {
       match this
@@ -421,6 +424,7 @@ module Ast {
       case LabeledExpr(_, body) => body.ExprType()
       case LetExpr(_, _, body) => body.ExprType()
       case QuantifierExpr(_, _, _, _) => BoolType
+      case ClosureExpr(_, _, resultType, _) => resultType
     }
 
     predicate HasType(typ: Type) {
@@ -447,6 +451,9 @@ module Ast {
         // SOON: && (forall i, j :: 0 <= i < j < |vv| ==> vv[i].name != vv[j].name)
         && (forall tr <- patterns :: tr.WellFormed())
         && body.WellFormed()
+      case ClosureExpr(closureBindings, _, _, properties) =>
+        && (forall b <- closureBindings :: b.WellFormed())
+        && (forall p <- properties :: p.WellFormed())
     }
 
     function ToString(context: PrintUtil.BindingPower := PrintUtil.BindingPower.Init): string {
@@ -490,6 +497,36 @@ module Ast {
           DeclsToString(vv) +
           Pattern.ListToString(patterns) + " " + body.ToString(opStrength.SubexpressionPower(PrintUtil.Right, context))
         )
+      case ClosureExpr(closureBindings, resultVar, resultType, properties) =>
+        "lift " + ClosureBindingsToString(closureBindings) + " into " + resultVar + ": " + resultType.ToString() + " by { " + ClosurePropertiesToString(properties) + " }"
+    }
+
+    static function ClosureBindingsToString(bindings: seq<ClosureBinding>): string {
+      if |bindings| == 0 then ""
+      else if |bindings| == 1 then ClosureBindingToString(bindings[0])
+      else ClosureBindingToString(bindings[0]) + ", " + ClosureBindingsToString(bindings[1..])
+    }
+
+    static function ClosureBindingToString(binding: ClosureBinding): string {
+      binding.name + 
+      (if |binding.params| == 0 then "" else "(" + ParamsToString(binding.params) + ")") +
+      " := " + binding.rhs.ToString()
+    }
+
+    static function ParamsToString(params: seq<(string, Type)>): string {
+      if |params| == 0 then ""
+      else if |params| == 1 then params[0].0 + ": " + params[0].1.ToString()
+      else params[0].0 + ": " + params[0].1.ToString() + ", " + ParamsToString(params[1..])
+    }
+
+    static function ClosurePropertiesToString(properties: seq<ClosureProperty>): string {
+      if |properties| == 0 then ""
+      else if |properties| == 1 then ClosurePropertyToString(properties[0])
+      else ClosurePropertyToString(properties[0]) + ", " + ClosurePropertiesToString(properties[1..])
+    }
+
+    static function ClosurePropertyToString(prop: ClosureProperty): string {
+      (if |prop.triggers| > 0 then Pattern.ListToString(prop.triggers) + " :: " else "") + prop.body.ToString()
     }
 
     static function DeclsToString(vv: seq<Variable>): string {
@@ -519,6 +556,11 @@ module Ast {
       case QuantifierExpr(_, vv, _, body) =>
         // don't look in patterns
         body.FreeVariables() - set v <- vv :: v
+      case ClosureExpr(closureBindings, _, _, properties) =>
+        // Free variables from bindings and properties
+        var bindingVars := set b <- closureBindings, v <- b.rhs.FreeVariables() :: v;
+        var propertyVars := set p <- properties, v <- p.body.FreeVariables() :: v;
+        bindingVars + propertyVars
     }
 
     static function FreeVariablesInList(exprs: seq<Expr>): set<Variable> {
@@ -591,6 +633,21 @@ module Ast {
         ""
       else
         " pattern " + Expr.ListToString(patterns[0].exprs) + ListToString(patterns[1..])
+    }
+  }
+
+  datatype ClosureBinding = ClosureBinding(name: string, params: seq<(string, Type)>, rhs: Expr)
+  {
+    predicate WellFormed() {
+      rhs.WellFormed()
+    }
+  }
+
+  datatype ClosureProperty = ClosureProperty(triggers: seq<Pattern>, body: Expr)
+  {
+    predicate WellFormed() {
+      && (forall tr <- triggers :: tr.WellFormed())
+      && body.WellFormed()
     }
   }
 }

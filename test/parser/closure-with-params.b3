@@ -1,0 +1,25 @@
+// RUN: b3 parse %s
+
+// Closure with parameters example from the spec
+function SeqLength(s: Sequence): int
+function SeqIndex(s: Sequence, i: int): Box
+function Apply(f: Func, x: Box): Box
+function Box(x: int): Box
+
+procedure TestClosureWithParams()
+{
+  var n: int
+  var e: Func
+  
+  // Closure expression: sequence constructor seq(n, e)
+  var s := lift
+    %len := n,
+    %f := e
+  into
+    %s: Sequence
+  by {
+    trigger SeqLength(%s) :: 0 <= %len ==> SeqLength(%s) == %len,
+    forall j: int trigger SeqIndex(%s, j) ::
+      0 <= j && j < %len ==> SeqIndex(%s, j) == Apply(%f, Box(j))
+  }
+}
