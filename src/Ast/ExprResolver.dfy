@@ -120,8 +120,6 @@ module ExprResolver {
         var _ :- CheckPatterns(trs, boundVars);
         r := QuantifierExpr(univ, boundVars, trs, b);
       case ClosureExpr(closureBindings, resultVar, resultType, properties) =>
-        // Assume well-formedness
-        assume {:axiom} expr.WellFormed(ers.b3, varMap.Keys);
         var elaborated :- ElaborateClosure(expr, ers, varMap);
         r := elaborated;
     }
@@ -205,6 +203,7 @@ module ExprResolver {
     varMap: map<string, Variable>
   ) returns (result: Result<Expr, string>)
     requires closure.ClosureExpr?
+    ensures result.Success? ==> closure.WellFormed(ers.b3, varMap.Keys)
     ensures result.Success? ==> result.value.WellFormed()
     decreases closure, 0
   {

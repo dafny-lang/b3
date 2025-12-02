@@ -1,7 +1,6 @@
-// RUN: b3 resolve %s | OutputCheck %s
-// CHECK: closure elaboration not yet fully implemented
-
+// RUN: b3 resolve %s
 // Test that closure elaboration returns appropriate error
+// Expected output: "closure elaboration not yet fully implemented"
 function F(): int
 
 procedure TestClosureElaboration()
