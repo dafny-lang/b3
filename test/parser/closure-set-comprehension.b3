@@ -1,4 +1,5 @@
-// RUN: b3 parse %s
+// RUN: %b3 parse --print "%s" > "%t"
+// RUN: %diff "%s.expect" "%t"
 
 // Set comprehension example from the spec
 function SetContains(s: Set, x: Box): bool

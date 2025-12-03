@@ -1,4 +1,5 @@
-// RUN: b3 parse %s
+// RUN: %b3 parse --print "%s" > "%t"
+// RUN: %diff "%s.expect" "%t"
 
 // Closure with multiple triggers in a property
 function F(x: int): int

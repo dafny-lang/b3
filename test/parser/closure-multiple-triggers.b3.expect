@@ -1,0 +1,11 @@
+// B3 program
+
+function F(x: int): int
+
+function G(x: int): int
+
+procedure TestMultipleTriggers()
+{
+  var x: int
+  var result := lift %val := x into %r: int by { trigger F(%r) trigger G(%r) :: F(%r) == G(%r) }
+}

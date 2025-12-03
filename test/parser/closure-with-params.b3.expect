@@ -1,0 +1,5 @@
+Error:
+23:     forall j: int trigger SeqIndex(%s, j) ::
+                              ^
+expected '}'
+

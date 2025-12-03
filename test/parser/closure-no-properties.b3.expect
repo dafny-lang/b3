@@ -1,0 +1,7 @@
+// B3 program
+
+procedure TestNoProperties()
+{
+  var x: int
+  var result := lift %val := x into %r: int by {  }
+}

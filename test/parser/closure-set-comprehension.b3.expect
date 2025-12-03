@@ -1,0 +1,5 @@
+Error:
+21:     forall bx: Box trigger SetContains(%s, bx) ::
+                               ^
+expected '}'
+

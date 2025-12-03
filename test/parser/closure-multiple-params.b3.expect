@@ -1,0 +1,10 @@
+// B3 program
+
+function F(x: int, y: int, z: int): int
+
+procedure TestMultipleParams()
+{
+  var a: int
+  var b: int
+  var result := lift %compute(x: int, y: int, z: int) := F(x + a, y * b, z) into %r: int by { %r == %compute(1, 2, 3) }
+}

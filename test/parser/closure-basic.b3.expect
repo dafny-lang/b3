@@ -1,0 +1,15 @@
+// B3 program
+
+function SeqLength(s: Sequence): int
+
+function SeqIndex(s: Sequence, i: int): Box
+
+function Box(x: int): Box
+
+procedure TestClosure()
+{
+  var e0: int
+  var e1: int
+  var e2: int
+  var s := lift %x0 := e0, %x1 := e1, %x2 := e2 into %s: Sequence by { trigger SeqLength(%s) :: SeqLength(%s) == 3, SeqIndex(%s, 0) == Box(%x0), SeqIndex(%s, 1) == Box(%x1), SeqIndex(%s, 2) == Box(%x2) }
+}
