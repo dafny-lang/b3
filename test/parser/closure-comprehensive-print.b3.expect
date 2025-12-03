@@ -1,0 +1,16 @@
+Error:
+69:     trigger %value :: %value == %z,
+                        ^
+expected 'if', or
+expected 'val', or
+expected 'forall', or
+expected 'exists', or
+expected 'lift', or
+expected 'false', or
+expected 'true', or
+expected a digit, or
+expected '|', or
+expected 'old', or
+expected a identifier start character, or
+expected '('
+

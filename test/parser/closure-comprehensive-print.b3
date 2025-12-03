@@ -1,0 +1,107 @@
+// RUN: %b3 parse --print "%s" > "%t"
+// RUN: %diff "%s.expect" "%t"
+
+// Comprehensive test for closure printing functionality
+// Tests all features: bindings with/without params, multiple triggers, nested expressions
+
+function SeqLength(s: Sequence): int
+function SeqIndex(s: Sequence, i: int): Box
+function Box(x: int): Box
+function SetMember(s: Set, x: Box): bool
+function SetCardinality(s: Set): int
+function MapDomain(m: Map): Set
+function MapApply(m: Map, k: Box): Box
+function Add(x: int, y: int): int
+function Mul(x: int, y: int): int
+
+procedure ComprehensiveClosureTest()
+{
+  var a: int
+  var b: int
+  var c: int
+  var d: int
+  
+  // Test 1: Multiple bindings without parameters
+  var simple := lift
+    %x := a,
+    %y := b,
+    %z := c
+  into
+    %result: Sequence
+  by {
+    trigger SeqLength(%result) :: SeqLength(%result) == 3,
+    SeqIndex(%result, 0) == Box(%x),
+    SeqIndex(%result, 1) == Box(%y),
+    SeqIndex(%result, 2) == Box(%z)
+  }
+  
+  // Test 2: Bindings with parameters (function-like)
+  var withParams := lift
+    %base := a,
+    %f(i: int) := Add(%base, i),
+    %g(x: int, y: int) := Mul(%f(x), %f(y))
+  into
+    %fn: int
+  by {
+    trigger %f(0) :: %f(0) == %base,
+    trigger %g(1, 2) :: %g(1, 2) == Mul(%f(1), %f(2))
+  }
+  
+  // Test 3: Multiple triggers on single property
+  var multiTrigger := lift
+    %elem := a,
+    %set := b
+  into
+    %s: Set
+  by {
+    trigger SetCardinality(%s) trigger SetMember(%s, Box(%elem)) :: 
+      SetMember(%s, Box(%elem)) && SetCardinality(%s) == 1
+  }
+  
+  // Test 4: Complex nested expressions in bindings
+  var nested := lift
+    %x := Add(a, b),
+    %y := Mul(%x, c),
+    %z := Add(%y, d)
+  into
+    %value: int
+  by {
+    trigger %value :: %value == %z,
+    %z == Add(Mul(Add(a, b), c), d)
+  }
+  
+  // Test 5: Empty bindings list
+  var noBindings := lift
+  into
+    %empty: int
+  by {
+    %empty == 0
+  }
+  
+  // Test 6: No properties (empty by block)
+  var noProps := lift
+    %val := a
+  into
+    %v: int
+  by { }
+  
+  // Test 7: Single binding, single property, no triggers
+  var minimal := lift
+    %x := a
+  into
+    %r: int
+  by {
+    %r == %x
+  }
+  
+  // Test 8: Map-like closure with domain and apply
+  var mapLike := lift
+    %keys := a,
+    %getValue(k: int) := Add(k, b)
+  into
+    %m: Map
+  by {
+    trigger MapDomain(%m) :: SetMember(MapDomain(%m), Box(%keys)),
+    trigger MapApply(%m, Box(%keys)) :: MapApply(%m, Box(%keys)) == Box(%getValue(%keys))
+  }
+}
