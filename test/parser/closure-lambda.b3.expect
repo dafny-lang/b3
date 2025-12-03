@@ -1,5 +1,5 @@
 Error:
-24:     forall j: int trigger SeqIndex(%s, j) ::
+24:     forall j: int trigger SeqIndex(%s, j)
                               ^
 expected '}'
 

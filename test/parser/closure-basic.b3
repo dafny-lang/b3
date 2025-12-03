@@ -20,7 +20,7 @@ procedure TestClosure()
   into
     %s: Sequence
   by {
-    trigger SeqLength(%s) :: SeqLength(%s) == 3,
+    trigger SeqLength(%s) SeqLength(%s) == 3,
     SeqIndex(%s, 0) == Box(%x0),
     SeqIndex(%s, 1) == Box(%x1),
     SeqIndex(%s, 2) == Box(%x2)

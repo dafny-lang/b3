@@ -120,8 +120,7 @@ module ExprResolver {
         var _ :- CheckPatterns(trs, boundVars);
         r := QuantifierExpr(univ, boundVars, trs, b);
       case ClosureExpr(closureBindings, resultVar, resultType, properties) =>
-        var elaborated :- ElaborateClosure(expr, ers, varMap);
-        r := elaborated;
+        r :- ElaborateClosure(expr, ers, varMap);
     }
     return Success(r);
   }

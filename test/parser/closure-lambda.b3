@@ -20,8 +20,8 @@ procedure TestClosureLambda()
   into
     %s: Sequence
   by {
-    trigger SeqLength(%s) :: 0 <= %len ==> SeqLength(%s) == %len,
-    forall j: int trigger SeqIndex(%s, j) ::
+    trigger SeqLength(%s) 0 <= %len ==> SeqLength(%s) == %len,
+    forall j: int trigger SeqIndex(%s, j)
       0 <= j && j < %len ==> SeqIndex(%s, j) == Box(%elements(j))
   }
 }

@@ -559,7 +559,7 @@ module Parser {
 
   function parseClosureProperty(c: ExprRecSel): B<ClosureProperty> {
     parseClosureTrigger(c).Rep().Then(triggers =>
-      (if |triggers| > 0 then Sym("::").M(_ => ()) else Nothing.M(_ => ())).e_I(c("expr")).M(body =>
+      c("expr").M(body =>
         ClosureProperty(triggers, body)
       )
     )

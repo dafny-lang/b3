@@ -15,6 +15,6 @@ procedure TestMultipleTriggers()
   into
     %r: int
   by {
-    trigger F(%r) trigger G(%r) :: F(%r) == G(%r)
+    trigger F(%r) trigger G(%r) F(%r) == G(%r)
   }
 }

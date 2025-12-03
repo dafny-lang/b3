@@ -498,13 +498,13 @@ module Ast {
           Pattern.ListToString(patterns) + " " + body.ToString(opStrength.SubexpressionPower(PrintUtil.Right, context))
         )
       case ClosureExpr(closureBindings, resultVar, resultType, properties) =>
-        "lift " + ClosureBindingsToString(closureBindings) + " into " + resultVar + ": " + resultType.ToString() + " by { " + ClosurePropertiesToString(properties) + " }"
+        "lift" + ClosureBindingsToString(closureBindings) + " into " + resultVar + ": " + resultType.ToString() + " by { " + ClosurePropertiesToString(properties) + " }"
     }
 
     static function ClosureBindingsToString(bindings: seq<ClosureBinding>): string {
       if |bindings| == 0 then ""
-      else if |bindings| == 1 then ClosureBindingToString(bindings[0])
-      else ClosureBindingToString(bindings[0]) + ", " + ClosureBindingsToString(bindings[1..])
+      else if |bindings| == 1 then " " + ClosureBindingToString(bindings[0])
+      else " " + ClosureBindingToString(bindings[0]) + ", " + ClosureBindingsToString(bindings[1..])
     }
 
     static function ClosureBindingToString(binding: ClosureBinding): string {
@@ -514,9 +514,7 @@ module Ast {
     }
 
     static function ParamsToString(params: seq<(string, Type)>): string {
-      if |params| == 0 then ""
-      else if |params| == 1 then params[0].0 + ": " + params[0].1.ToString()
-      else params[0].0 + ": " + params[0].1.ToString() + ", " + ParamsToString(params[1..])
+      Comma(SeqMap(params, (p: (string, Type)) => p.0 + ": " + p.1.ToString()), ", ")
     }
 
     static function ClosurePropertiesToString(properties: seq<ClosureProperty>): string {

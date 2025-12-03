@@ -29,7 +29,7 @@ procedure ComprehensiveClosureTest()
   into
     %result: Sequence
   by {
-    trigger SeqLength(%result) :: SeqLength(%result) == 3,
+    trigger SeqLength(%result) SeqLength(%result) == 3,
     SeqIndex(%result, 0) == Box(%x),
     SeqIndex(%result, 1) == Box(%y),
     SeqIndex(%result, 2) == Box(%z)
@@ -43,8 +43,8 @@ procedure ComprehensiveClosureTest()
   into
     %fn: int
   by {
-    trigger %f(0) :: %f(0) == %base,
-    trigger %g(1, 2) :: %g(1, 2) == Mul(%f(1), %f(2))
+    trigger %f(0) %f(0) == %base,
+    trigger %g(1, 2) %g(1, 2) == Mul(%f(1), %f(2))
   }
   
   // Test 3: Multiple triggers on single property
@@ -54,7 +54,7 @@ procedure ComprehensiveClosureTest()
   into
     %s: Set
   by {
-    trigger SetCardinality(%s) trigger SetMember(%s, Box(%elem)) :: 
+    trigger SetCardinality(%s) trigger SetMember(%s, Box(%elem))
       SetMember(%s, Box(%elem)) && SetCardinality(%s) == 1
   }
   
@@ -66,7 +66,7 @@ procedure ComprehensiveClosureTest()
   into
     %value: int
   by {
-    trigger %value :: %value == %z,
+    trigger %value %value == %z,
     %z == Add(Mul(Add(a, b), c), d)
   }
   
@@ -101,7 +101,7 @@ procedure ComprehensiveClosureTest()
   into
     %m: Map
   by {
-    trigger MapDomain(%m) :: SetMember(MapDomain(%m), Box(%keys)),
-    trigger MapApply(%m, Box(%keys)) :: MapApply(%m, Box(%keys)) == Box(%getValue(%keys))
+    trigger MapDomain(%m) SetMember(MapDomain(%m), Box(%keys)),
+    trigger MapApply(%m, Box(%keys)) MapApply(%m, Box(%keys)) == Box(%getValue(%keys))
   }
 }
