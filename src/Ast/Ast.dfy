@@ -523,7 +523,7 @@ module Ast {
     }
 
     static function ClosurePropertyToString(prop: ClosureProperty): string {
-      Pattern.ListToString(prop.triggers) + prop.body.ToString()
+      Pattern.ListToString(prop.triggers) + " " + prop.body.ToString()
     }
 
     static function DeclsToString(vv: seq<Variable>): string {
