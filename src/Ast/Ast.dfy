@@ -518,13 +518,12 @@ module Ast {
     }
 
     static function ClosurePropertiesToString(properties: seq<ClosureProperty>): string {
-      if |properties| == 0 then ""
-      else if |properties| == 1 then ClosurePropertyToString(properties[0])
-      else ClosurePropertyToString(properties[0]) + ", " + ClosurePropertiesToString(properties[1..])
+      var ss := SeqMap(properties, prop requires prop in properties => ClosurePropertyToString(prop));
+      Comma(ss, ", ")
     }
 
     static function ClosurePropertyToString(prop: ClosureProperty): string {
-      (if |prop.triggers| > 0 then Pattern.ListToString(prop.triggers) + " :: " else "") + prop.body.ToString()
+      Pattern.ListToString(prop.triggers) + prop.body.ToString()
     }
 
     static function DeclsToString(vv: seq<Variable>): string {
