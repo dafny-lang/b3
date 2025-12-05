@@ -19,8 +19,8 @@ module Parser {
   const TopLevel: B<Program> :=
     W.e_I(RepTill(parseTopLevelDecl.I_e(W), EOS)).M(
       decls =>
-        var (tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls);
-        Program(tt, gg, ff, aa, pp))
+        var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls);
+        Program(dd, tt, gg, ff, aa, pp))
 
   // ----- Parser helpers
 
@@ -185,30 +185,51 @@ module Parser {
   // ----- Top-level declarations
 
   datatype TopLevelDecl =
+    | TDomain(domainDecl: Domain)
     | TType(typeDecl: Types.TypeName)
     | TTagger(taggerDecl: Tagger)
     | TFunction(funcDecl: Function)
     | TAxiom(axiomDecl: Axiom)
     | TProc(procDecl: Procedure)
 
-  const parseTopLevelDecl: B<TopLevelDecl> :=
+  const parseTopLevelDecl: B<TopLevelDecl> := RecMap(topLevelGallery, "decl")
+
+  function parseMemberDecl(c: TopLevelRecSel): B<TopLevelDecl> {
     Or([
+         parseDomainDecl(c).M(decl => TDomain(decl)),
          parseTypeDecl.M(decl => TType(decl)),
          parseTaggerDecl.M(decl => TTagger(decl)),
          parseFunctionDecl.M(decl => TFunction(decl)),
          parseAxiomDecl.M(decl => TAxiom(decl)),
          parseProcDecl.M(decl => TProc(decl))
        ])
+  }
 
-  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Types.TypeName>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
-    if decls == [] then ([], [], [], [], []) else
-      var (tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls[1..]);
+  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Domain>, seq<Types.TypeName>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
+    if decls == [] then ([], [], [], [], [], []) else
+      var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls[1..]);
       match decls[0]
-      case TType(decl) => ([decl] + tt, gg, ff, aa, pp)
-      case TTagger(decl) => (tt, [decl] + gg, ff, aa, pp)
-      case TFunction(decl) => (tt, gg, [decl] + ff, aa, pp)
-      case TAxiom(decl) => (tt, gg, ff, [decl] + aa, pp)
-      case TProc(decl) => (tt, gg, ff, aa, [decl] + pp)
+      case TDomain(decl) => ([decl] + dd, tt, gg, ff, aa, pp)
+      case TType(decl) => (dd, [decl] + tt, gg, ff, aa, pp)
+      case TTagger(decl) => (dd, tt, [decl] + gg, ff, aa, pp)
+      case TFunction(decl) => (dd, tt, gg, [decl] + ff, aa, pp)
+      case TAxiom(decl) => (dd, tt, gg, ff, [decl] + aa, pp)
+      case TProc(decl) => (dd, tt, gg, ff, aa, [decl] + pp)
+  }
+
+  function parseDomainDecl(c: TopLevelRecSel): B<Domain> {
+    T("domain").e_I(parseId).Then(name =>
+      parseParenthesized(parseCommaDelimitedSeq(parseId)).Option().Then((maybeParams: Option<seq<string>>) =>
+        var parameters :=
+          match maybeParams
+          case None => []
+          case Some(ids) => ids;
+        Sym("{").e_I(c("decl").Rep()).I_e(Sym("}")).M(members =>
+          var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(members);
+          var domainBody := Program(dd, tt, gg, ff, aa, pp);
+          Domain(name, parameters, domainBody)
+        )
+    ))
   }
 
   const parseTypeDecl: B<Types.TypeName> :=
@@ -292,8 +313,14 @@ module Parser {
 
   // ----- Parsing gallery
 
+  type TopLevelRecSel = RecMapSel<TopLevelDecl>
   type StmtRecSel = RecMapSel<Stmt>
   type ExprRecSel = RecMapSel<Expr>
+
+  const topLevelGallery: map<string, RecMapDef<TopLevelDecl>> :=
+    map[
+      "decl" := RecMapDef(0, (c: TopLevelRecSel) => parseMemberDecl(c))
+    ]
 
   const stmtGallery: map<string, RecMapDef<Stmt>> :=
     map[

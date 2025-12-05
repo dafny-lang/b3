@@ -3,8 +3,10 @@
 A _program_ consists of a list of top-level declarations. The order of these is irrelevant.
 
 ```
-Program ::= ( TypeDecl | Domain | MemberDecl )*
+Program ::= MemberDecl*
 MemberDecl ::=
+  | Domain
+  | TypeDecl
   | Tagger
   | Function
   | Axiom
