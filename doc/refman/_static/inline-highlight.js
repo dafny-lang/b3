@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     'function',
     'axiom',
     'procedure',
+    'domain',
     // statements
     'var',
     'val',

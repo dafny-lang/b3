@@ -10,6 +10,7 @@ b3_keywords = (
     'function',
     'axiom',
     'procedure',
+    'domain',
     # statements
     'var',
     'val',
