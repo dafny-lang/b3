@@ -15,10 +15,16 @@ module Resolver {
   import opened StmtResolver
   import opened ExprResolver
 
-  method Resolve(b3: Raw.Program) returns (r: Result<Ast.Program, string>)
+  method Resolve(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<Ast.Program, string>)
+    requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
     ensures r.Success? ==> b3.WellFormed() && r.value.WellFormed()
+    decreases b3
   {
-    var typeMap, types :- ResolveAllTypes(b3);
+    assume typeParameters == []; // TODO
+
+    var domainMap, domains :- ResolveAllDomains(b3);
+
+    var typeMap, types :- ResolveAllTypes(b3, typeParameters);
 
     var taggerMap, taggerFunctions :- ResolveAllTaggers(b3, typeMap);
     ConsequencesOfTagResolution(taggerMap, taggerFunctions);
@@ -40,16 +46,64 @@ module Resolver {
 
     var procMap, procedures :- ResolveAllProcedures(ers);
 
-    var r3 := Program(types, taggerFunctions + functions, generatedAxioms + axioms, procedures);
+    var r3 := Program(domains, types, taggerFunctions + functions, generatedAxioms + axioms, procedures);
     DistinctConcat(taggerMap, taggerFunctions, functionMap, functions);
 
     return Success(r3);
   }
 
-  method ResolveAllTypes(b3: Raw.Program) returns (r: Result<map<string, TypeDecl>, string>, types: seq<TypeDecl>)
+  method ResolveAllDomains(b3: Raw.Program) returns (r: Result<map<string, Domain>, string>, domains: seq<Domain>)
+    decreases b3, 0
+  {
+    var domainMap: map<string, Domain> := map[];
+    domains := [];
+    for n := 0 to |b3.domains|
+      // domainMap maps domains seen so far to distinct domain-declaration objects
+      invariant domainMap.Keys == set domain <- b3.domains[..n] :: domain.name
+      // domainMap organizes domain-declaration objects correctly according to their names
+      invariant forall name <- domainMap :: domainMap[name].self.Name == name
+      // domains seen so far have distinct names
+      invariant forall i, j :: 0 <= i < j < n ==> b3.domains[i] != b3.domains[j]
+    {
+      var domain := b3.domains[n];
+
+      var name := domain.name;
+      if name in domainMap {
+        return Failure("duplicate domain name: " + name), domains;
+      }
+      var self := new TypeDecl(name);
+      ghost var typesForUseInDomainBody := [self];
+
+      var params := [];
+      for i := 0 to |domain.params|
+        invariant typesForUseInDomainBody == [self] + params
+        invariant forall i, j :: 0 <= i < j < |typesForUseInDomainBody| ==> typesForUseInDomainBody[i].Name != typesForUseInDomainBody[j].Name
+      {
+        var typeParamName := domain.params[i];
+        if name == typeParamName {
+          return Failure("domain type parameter is not allowed to have the same name of the domain itself: '" + typeParamName + "'"), domains;
+        } else if exists priorTypeParam: TypeDecl <- params :: priorTypeParam.Name == typeParamName {
+          return Failure("duplicate domain type parameter name: '" + typeParamName + "'"), domains;
+        }
+        var typeParam := new TypeDecl(typeParamName);
+        params := params + [typeParam];
+        typesForUseInDomainBody := typesForUseInDomainBody + [typeParam];
+      }
+
+      var resolvedMembers :- Resolve(domain.members, [self] + params);
+
+      var decl := Domain(self, params, resolvedMembers);
+      domainMap := domainMap[name := decl];
+      domains := domains + [decl];
+    }
+    return Success(domainMap), domains;
+  }
+
+  method ResolveAllTypes(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<map<string, TypeDecl>, string>, types: seq<TypeDecl>)
+    requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
     ensures r.Success? ==> var typeMap := r.value;
       // raw types were well-formed
-      && typeMap.Keys == (set typename <- b3.types)
+      && typeMap.Keys == (set param <- typeParameters :: param.Name) + (set typename <- b3.types)
       && NameAlignment(typeMap)
       && (forall typename <- b3.types :: typename !in BuiltInTypes)
       && (forall i, j :: 0 <= i < j < |b3.types| ==> b3.types[i] != b3.types[j])
@@ -58,16 +112,19 @@ module Resolver {
       // typeMap.Keys/types correspondence
       && LinearForm(r.value, types)
   {
+    var typeParameterNames := set param <- typeParameters :: param.Name;
+    assume typeParameterNames == {}; // TODO
+
     var typeMap: map<string, TypeDecl> := map[];
     types := [];
     for n := 0 to |b3.types|
-      // typeMap maps user-defined types seen so far to distinct type-declaration objects
-      invariant typeMap.Keys == set typename <- b3.types[..n]
+      // typeMap maps type parameters and user-defined types seen so far to distinct type-declaration objects
+      invariant typeMap.Keys == typeParameterNames + set typename <- b3.types[..n]
       // typeMap organizes type-declaration objects correctly according to their names
       invariant NameAlignment(typeMap)
       // no user-defined type seen so far uses the name of a built-in type
       invariant forall typename <- b3.types[..n] :: typename !in BuiltInTypes
-      // the user-defined types seen so far have distinct names
+      // user-defined types seen so far have distinct names
       invariant forall i, j :: 0 <= i < j < n ==> b3.types[i] != b3.types[j]
       // resolved type declarations have distinct names
       invariant forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name
@@ -113,7 +170,7 @@ module Resolver {
       invariant NameAlignment(taggerMap)
       // taggers seen so far have distinct names
       invariant forall i, j :: 0 <= i < j < n ==> b3.taggers[i].name != b3.taggers[j].name
-      // the taggers seen so far are well-formed
+      // taggers seen so far are well-formed
       invariant forall tagger <- b3.taggers[..n] :: tagger.WellFormed(b3)
       invariant forall tagger <- taggerFunctions :: tagger.WellFormedAsTagger()
       // resolved tagger functions have distinct names

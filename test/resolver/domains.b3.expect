@@ -1,4 +1,4 @@
-// B3 program
+// Resolved B3 program
 
 domain Domain
 {
@@ -21,6 +21,19 @@ domain DS(X)
 
   function G(injective b: bool): int
 
+  function G..b(subject: int): bool
+
+  axiom explains G
+    forall b: bool
+      pattern G(b)
+      G..b(G(b)) == b
+
+  axiom explains Ten
+    forall x: int, y: Y
+      pattern Ten(x, y)
+      x == 7 ==>
+      Ten(x, y) == x + 3
+
   axiom explains G
     G(true) < 10
 }
@@ -30,7 +43,7 @@ domain DT(X, Y)
   procedure OnlyBodyless(u: int, out w: int)
     ensures u <= w
 
-  procedure Q(dt: DT, x: X, y: Y)
+  procedure Q(x: X, y: Y)
 }
 
 type Outside

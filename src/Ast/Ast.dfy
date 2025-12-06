@@ -11,6 +11,7 @@ module Ast {
     reveals NamedDecl, NamedDecl.Distinct, TypeDecl, Type
     provides NamedDecl.Name, Type.ToString
     reveals Program, Type, Variable, Procedure, Label, PParameter, LocalVariable
+    reveals Domain
     reveals Expr, Operator, ParameterMode, AExpr, Location, Stmt, CallArgument
     reveals AutoInvVariable
     reveals Program.WellFormed, Procedure.WellFormed, PParameter.WellFormed, AExpr.WellFormed, Stmt.WellFormed, Expr.WellFormed, CallArgument.WellFormed
@@ -70,7 +71,9 @@ module Ast {
     }
   }
 
-  datatype Program = Program(types: seq<TypeDecl>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
+  datatype Domain = Domain(self: TypeDecl, params: seq<TypeDecl>, members: Program)
+
+  datatype Program = Program(domains: seq<Domain>, types: seq<TypeDecl>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
   {
     predicate WellFormed()
       reads procedures, functions

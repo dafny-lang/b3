@@ -1,4 +1,4 @@
-// RUN: %b3 parse --print "%s" > "%t"
+// RUN: %b3 resolve --rprint "%s" > "%t"
 // RUN: %diff "%s.expect" "%t"
 
 type Outside

@@ -12,26 +12,32 @@ module Printer {
 
   method Members(b3: Program, indent: nat) {
     var omitIndent := true;
+
     for i := 0 to |b3.domains| {
       omitIndent := IndentNewDeclaration(indent, omitIndent);
       DomainDecl(b3.domains[i], indent);
     }
+    
     for i := 0 to |b3.types| {
       omitIndent := IndentNewDeclaration(indent, omitIndent);
       TypeDecl(b3.types[i], indent);
     }
+
     for i := 0 to |b3.taggers| {
       omitIndent := IndentNewDeclaration(indent, omitIndent);
       TaggerDecl(b3.taggers[i], indent);
     }
+
     for i := 0 to |b3.functions| {
       omitIndent := IndentNewDeclaration(indent, omitIndent);
       FunctionDecl(b3.functions[i], indent);
     }
+
     for i := 0 to |b3.axioms| {
       omitIndent := IndentNewDeclaration(indent, omitIndent);
       AxiomDecl(b3.axioms[i], indent);
     }
+
     for i := 0 to |b3.procedures| {
       omitIndent := IndentNewDeclaration(indent, omitIndent);
       Procedure(b3.procedures[i], indent);
@@ -126,7 +132,9 @@ module Printer {
 
     match proc.body
     case None =>
-    case Some(stmt) => StmtAsBlock(stmt, indent);
+    case Some(stmt) =>
+      Indent(indent);
+      StmtAsBlock(stmt, indent);
   }
 
   method OptionalAutoInvariant(optionalAutoInv: Option<Expr>) {
