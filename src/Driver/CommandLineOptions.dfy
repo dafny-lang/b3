@@ -16,10 +16,6 @@ module CommandLineOptions {
     function GetOptionInfo(name: string): OptionInfo
 
     method GetOptionsHelp() returns (help: string)
-      ensures |help| >= 0
-    {
-      help := "";
-    }
   }
 
   datatype OptionInfo =
@@ -31,19 +27,20 @@ module CommandLineOptions {
   datatype CliResult<Verb> = CliResult(verb: Verb, options: CliOptions, files: seq<string>)
 
   method Parse<Verb>(syntax: Syntax<Verb>, args: seq<string>) returns (result: Result<CliResult<Verb>, string>) {
-    var verbs := syntax.GetVerbs();
-    
     // Check for --help at the top level (b3 --help)
     if |args| >= 2 && args[1] == "--help" {
+      var verbs := syntax.GetVerbs();
       var helpMsg := BuildGeneralHelp(syntax, verbs);
       return Failure(helpMsg);
     }
     
     if |args| < 2 {
+      var verbs := syntax.GetVerbs();
       var helpMsg := BuildGeneralHelp(syntax, verbs);
       return Failure(helpMsg);
     }
 
+    var verbs := syntax.GetVerbs();
     var verb;
     if i :| 0 <= i < |verbs| && verbs[i].0 == args[1] {
       verb := verbs[i].1;
