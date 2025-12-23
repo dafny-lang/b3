@@ -97,15 +97,11 @@ module CommandLineOptions {
 
   method BuildVerbList<Verb>(verbs: seq<(string, Verb)>, separator: string) returns (list: string) {
     list := "";
-    var i := 0;
-    while i < |verbs|
-      decreases |verbs| - i
-    {
+    for i := 0 to |verbs| {
       if i > 0 {
         list := list + separator;
       }
       list := list + verbs[i].0;
-      i := i + 1;
     }
   }
 }
