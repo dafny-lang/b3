@@ -16,6 +16,8 @@ module CommandLineOptions {
     function GetOptionInfo(name: string): OptionInfo
 
     method GetOptionsHelp() returns (help: string)
+    
+    predicate IsStdinOption(name: string)
   }
 
   datatype OptionInfo =
@@ -71,7 +73,12 @@ module CommandLineOptions {
         } else if optionName in options {
           return Failure("Option --" + optionName + " is given more than once");
         }
-        options := options[optionName := args[i..i + info.n]];
+        // Special handling for stdin option
+        if syntax.IsStdinOption(optionName) {
+          options := options[optionName := []];
+        } else {
+          options := options[optionName := args[i..i + info.n]];
+        }
         i := i + 1 + info.n;
       } else {
         files := files + [arg];
@@ -92,7 +99,8 @@ module CommandLineOptions {
 
   method BuildVerbHelp<Verb>(syntax: Syntax<Verb>, verb: string) returns (help: string) {
     var optionsHelp := syntax.GetOptionsHelp();
-    help := "Usage: " + syntax.ToolName + " " + verb + " [options] <filename>" + optionsHelp;
+    help := "Usage: " + syntax.ToolName + " " + verb + " [options] <filename>\n" +
+            "       " + syntax.ToolName + " " + verb + " [options] --stdin" + optionsHelp;
   }
 
   method BuildVerbList<Verb>(verbs: seq<(string, Verb)>, separator: string) returns (list: string) {

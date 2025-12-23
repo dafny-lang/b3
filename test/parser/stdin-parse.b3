@@ -1,0 +1,4 @@
+// RUN: cat "%s" | %b3 parse --stdin --print > "%t"
+// RUN: %diff "%s.expect" "%t"
+
+function test(): int { 42 }
