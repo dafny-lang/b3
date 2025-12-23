@@ -14,6 +14,12 @@ module CommandLineOptions {
     method GetVerbs() returns (verbs: seq<(string, Verb)>)
 
     function GetOptionInfo(name: string): OptionInfo
+
+    method GetOptionsHelp() returns (help: string)
+      ensures |help| >= 0
+    {
+      help := "";
+    }
   }
 
   datatype OptionInfo =
@@ -25,16 +31,31 @@ module CommandLineOptions {
   datatype CliResult<Verb> = CliResult(verb: Verb, options: CliOptions, files: seq<string>)
 
   method Parse<Verb>(syntax: Syntax<Verb>, args: seq<string>) returns (result: Result<CliResult<Verb>, string>) {
+    var verbs := syntax.GetVerbs();
+    
+    // Check for --help at the top level (b3 --help)
+    if |args| >= 2 && args[1] == "--help" {
+      var helpMsg := BuildGeneralHelp(syntax, verbs);
+      return Failure(helpMsg);
+    }
+    
     if |args| < 2 {
-      return Failure("Usage: " + syntax.ToolName + " <verb> <options> <filenames>");
+      var helpMsg := BuildGeneralHelp(syntax, verbs);
+      return Failure(helpMsg);
     }
 
-    var verbs := syntax.GetVerbs();
     var verb;
     if i :| 0 <= i < |verbs| && verbs[i].0 == args[1] {
       verb := verbs[i].1;
     } else {
-      return Failure("Unrecognized verb: " + args[1]);
+      var verbList := BuildVerbList(verbs, ", ");
+      return Failure("Unrecognized verb: " + args[1] + "\n\nAvailable verbs: " + verbList);
+    }
+
+    // Check for --help after verb (b3 verify --help)
+    if |args| >= 3 && args[2] == "--help" {
+      var helpMsg := BuildVerbHelp(syntax, args[1]);
+      return Failure(helpMsg);
     }
 
     var options := map[];
@@ -46,7 +67,8 @@ module CommandLineOptions {
         var optionName := arg[2..];
         var info := syntax.GetOptionInfo(optionName);
         if info == Unknown {
-          return Failure("Unknown option: --" + optionName);
+          var optionsHelp := syntax.GetOptionsHelp();
+          return Failure("Unknown option: --" + optionName + optionsHelp);
         } else if |args| < i + 1 + info.n {
           return Failure("Option --" + optionName + " requires " + Int2String(info.n) + " arguments, but only " + Int2String(|args| - 1) + " are given");
         } else if optionName in options {
@@ -61,5 +83,32 @@ module CommandLineOptions {
     }
 
     return Success(CliResult(verb, options, files));
+  }
+
+  method BuildGeneralHelp<Verb>(syntax: Syntax<Verb>, verbs: seq<(string, Verb)>) returns (help: string) {
+    var verbListMultiline := BuildVerbList(verbs, "\n  ");
+    help := "Usage: " + syntax.ToolName + " <verb> [options] <filename>\n\n" +
+            "Verbs:\n  " + verbListMultiline + "\n\n" +
+            "Example: " + syntax.ToolName + " verify program.b3\n\n" +
+            "For verb-specific options, use: " + syntax.ToolName + " <verb> --help";
+  }
+
+  method BuildVerbHelp<Verb>(syntax: Syntax<Verb>, verb: string) returns (help: string) {
+    var optionsHelp := syntax.GetOptionsHelp();
+    help := "Usage: " + syntax.ToolName + " " + verb + " [options] <filename>" + optionsHelp;
+  }
+
+  method BuildVerbList<Verb>(verbs: seq<(string, Verb)>, separator: string) returns (list: string) {
+    list := "";
+    var i := 0;
+    while i < |verbs|
+      decreases |verbs| - i
+    {
+      if i > 0 {
+        list := list + separator;
+      }
+      list := list + verbs[i].0;
+      i := i + 1;
+    }
   }
 }

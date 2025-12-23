@@ -41,6 +41,19 @@ module B3 {
       case "z3" => CLI.OptionInfo.ArgumentCount(0)
       case _ => CLI.OptionInfo.Unknown
     }
+
+    method GetOptionsHelp() returns (help: string) {
+      help := "\nOptions:\n" +
+              "  --print                      Print the raw AST\n" +
+              "  --rprint                     Print the resolved AST\n" +
+              "  --solver-log                 Show SMT solver log\n" +
+              "  --solver-log-no-options      Show SMT solver log without options\n" +
+              "  --solver-failure             Show solver failures\n" +
+              "  --show-proof-obligations     Show proof obligations\n" +
+              "  --print-incarnations         Print incarnations\n" +
+              "  --z3                         Use Z3 solver (default)\n" +
+              "  --cvc5                       Use CVC5 solver\n";
+    }
   }
 
   datatype Verb = Parse | Resolve | Verify
