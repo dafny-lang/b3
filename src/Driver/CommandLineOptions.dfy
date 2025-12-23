@@ -4,7 +4,7 @@ module CommandLineOptions {
 
   export
     reveals Syntax, OptionInfo, CliResult, CliOptions
-    provides Syntax.ToolName, Syntax.GetVerbs, Syntax.GetOptionInfo
+    provides Syntax.ToolName, Syntax.GetVerbs, Syntax.GetOptionInfo, Syntax.IsStdinOption
     provides Parse
     provides Wrappers
 
