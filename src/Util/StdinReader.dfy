@@ -7,4 +7,5 @@ module StdinReader {
 
   @Axiom
   method {:extern} ReadStdin() returns (r: Result<string, string>)
+    decreases *
 }

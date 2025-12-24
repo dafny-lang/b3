@@ -65,7 +65,9 @@ module B3 {
 
   datatype Verb = Parse | Resolve | Verify
 
-  method Main(args: seq<string>) {
+  method Main(args: seq<string>)
+    decreases *
+  {
     var syntax := new B3CliSyntax();
     var cliResult := CLI.Parse(syntax, args);
     if cliResult.Failure? {
@@ -132,7 +134,9 @@ module B3 {
    return Success(b3);
   }
 
-  method ReadAndParseFromStdin() returns (r: Result<RawAst.Program, string>) {
+  method ReadAndParseFromStdin() returns (r: Result<RawAst.Program, string>)
+    decreases *
+  {
     var input :- StdinReader.ReadStdin();
     var parseResult := SB.Apply(Parser.TopLevel, input);
     var b3 :- match parseResult {
