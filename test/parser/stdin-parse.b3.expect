@@ -1,0 +1,6 @@
+// B3 program
+
+function test(): int
+{
+  42
+}

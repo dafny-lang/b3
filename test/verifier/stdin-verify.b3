@@ -1,0 +1,19 @@
+// RUN: cat "%s" | %verify --stdin > "%t"
+// RUN: %diff "%s.expect" "%t"
+
+procedure TestStdin(x: int)
+  requires x > 0
+  ensures x > 0
+{
+  check x > 0
+}
+
+function Inc(x: int): int
+{
+  x + 1
+}
+
+procedure UseInc()
+{
+  check Inc(5) == 6
+}
