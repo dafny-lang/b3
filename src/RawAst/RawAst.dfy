@@ -474,7 +474,7 @@ module RawAst {
       case ClosureExpr(closureBindings, resultVar, resultType, properties) =>
         && b3.IsType(resultType)
         && (forall b <- closureBindings :: b.WellFormed(b3, scope))
-        && (forall p <- properties :: p.WellFormed(b3, scope, closureBindings))
+        && (forall p <- properties :: p.WellFormed(b3, scope, closureBindings, resultVar))
     }
   }
 
@@ -495,12 +495,37 @@ module RawAst {
     }
   }
 
+  /// A closure property is an expression (with optional triggers) that describes
+  /// the logical behavior of the closure result.
+  ///
+  /// Example: trigger SeqLength(%s) :: SeqLength(%s) == 3
+  ///
+  /// Properties can reference variables from multiple sources, which together
+  /// form the "property scope":
+  /// - Outer scope: variables from the enclosing context
+  /// - Result variable: the closure's into-variable (e.g., %s)
+  /// - Binding names: closure binding names used as values (e.g., %body)
+  /// - Binding parameters: parameters from closure bindings (e.g., x in %body(x: int) := e)
+  ///
+  /// Note: The resultVar parameter was added to support the full property scope.
+  /// Previously, the scope only included outer scope + binding parameters, which
+  /// was insufficient for properties that reference the result variable or binding names.
   datatype ClosureProperty = ClosureProperty(triggers: seq<Pattern>, body: Expr)
   {
-    predicate WellFormed(b3: Program, scope: Scope, bindings: seq<ClosureBinding>) {
-      // Properties can reference closure binding parameters
+    /// Checks that the property is well-formed in the given scope.
+    ///
+    /// The property scope is computed as:
+    ///   scope + {resultVar} + bindingNames + bindingParams
+    ///
+    /// This ensures properties can reference:
+    /// - Variables from the outer scope
+    /// - The result variable (e.g., %s in "lift ... into %s: T by { ... }")
+    /// - Closure binding names (e.g., %body in "%s == SeqBuild(n, %body)")
+    /// - Binding parameters (e.g., i in "forall i :: %body(i) == ...")
+    predicate WellFormed(b3: Program, scope: Scope, bindings: seq<ClosureBinding>, resultVar: string) {
+      var bindingNames := set b <- bindings :: b.name;
       var bindingParams := set b <- bindings, p <- b.params :: p.name;
-      var propertyScope := scope + bindingParams;
+      var propertyScope := scope + {resultVar} + bindingNames + bindingParams;
       && (forall tr <- triggers :: tr.WellFormed(b3, propertyScope))
       && body.WellFormed(b3, propertyScope)
     }
