@@ -19,8 +19,8 @@ module Parser {
   const TopLevel: B<Program> :=
     W.e_I(RepTill(parseTopLevelDecl.I_e(W), EOS)).M(
       decls =>
-        var (tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls);
-        Program(tt, gg, ff, aa, pp))
+        var (tt, dd, gg, ff, aa, pp) := SeparateTopLevelDecls(decls);
+        Program(tt, dd, gg, ff, aa, pp))
 
   // ----- Parser helpers
 
@@ -178,6 +178,10 @@ module Parser {
     parser.I_I(Sym(",").e_I(parser).Rep()).M2(MId, (x, xs) => [x] + xs)
   }
 
+  function parseNonemptyBarDelimitedSeq<X>(parser: B<X>): B<seq<X>> {
+    parser.I_I(Sym("|").e_I(parser).Rep()).M2(MId, (x, xs) => [x] + xs)
+  }
+
   function Unfold3l<X, Y, Z>(r: ((X, Y), Z)): (X, Y, Z) {
     (r.0.0, r.0.1, r.1)
   }
@@ -186,6 +190,7 @@ module Parser {
 
   datatype TopLevelDecl =
     | TType(typeDecl: Types.TypeName)
+    | TDatatype(datatypeDecl: DatatypeDecl)
     | TTagger(taggerDecl: Tagger)
     | TFunction(funcDecl: Function)
     | TAxiom(axiomDecl: Axiom)
@@ -194,25 +199,44 @@ module Parser {
   const parseTopLevelDecl: B<TopLevelDecl> :=
     Or([
          parseTypeDecl.M(decl => TType(decl)),
+         parseDatatypeDecl.M(decl => TDatatype(decl)),
          parseTaggerDecl.M(decl => TTagger(decl)),
          parseFunctionDecl.M(decl => TFunction(decl)),
          parseAxiomDecl.M(decl => TAxiom(decl)),
          parseProcDecl.M(decl => TProc(decl))
        ])
 
-  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Types.TypeName>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
-    if decls == [] then ([], [], [], [], []) else
-      var (tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls[1..]);
+  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Types.TypeName>, seq<DatatypeDecl>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
+    if decls == [] then ([], [], [], [], [], []) else
+      var (tt, dd, gg, ff, aa, pp) := SeparateTopLevelDecls(decls[1..]);
       match decls[0]
-      case TType(decl) => ([decl] + tt, gg, ff, aa, pp)
-      case TTagger(decl) => (tt, [decl] + gg, ff, aa, pp)
-      case TFunction(decl) => (tt, gg, [decl] + ff, aa, pp)
-      case TAxiom(decl) => (tt, gg, ff, [decl] + aa, pp)
-      case TProc(decl) => (tt, gg, ff, aa, [decl] + pp)
+      case TType(decl) => ([decl] + tt, dd, gg, ff, aa, pp)
+      case TDatatype(decl) => (tt, [decl] + dd, gg, ff, aa, pp)
+      case TTagger(decl) => (tt, dd, [decl] + gg, ff, aa, pp)
+      case TFunction(decl) => (tt, dd, gg, [decl] + ff, aa, pp)
+      case TAxiom(decl) => (tt, dd, gg, ff, [decl] + aa, pp)
+      case TProc(decl) => (tt, dd, gg, ff, aa, [decl] + pp)
   }
 
   const parseTypeDecl: B<Types.TypeName> :=
     T("type").e_I(parseId)
+
+  const parseConstructorField: B<ConstructorField> :=
+    parseIdType.M2(MId, (name, typ) => ConstructorField(name, typ))
+
+  const parseConstructor: B<Constructor> :=
+    parseId.Then(name =>
+      parseParenthesized(parseCommaDelimitedSeq(parseConstructorField)).M(fields =>
+        Constructor(name, fields)
+      )
+    )
+
+  const parseDatatypeDecl: B<DatatypeDecl> :=
+    T("datatype").e_I(parseId).Then(name =>
+      Sym("=").e_I(parseNonemptyBarDelimitedSeq(parseConstructor)).M(constructors =>
+        DatatypeDecl(name, constructors)
+      )
+    )
 
   const parseTaggerDecl: B<Tagger> :=
     T("tagger").e_I(parseId).I_e(T("for")).I_I(parseType).M2(MId, (name, typeName) => Tagger(name, typeName))

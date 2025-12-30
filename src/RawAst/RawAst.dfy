@@ -7,7 +7,7 @@ module RawAst {
   // Top-level program
 
   // A raw program reflects program that has been parsed.
-  datatype Program = Program(types: seq<TypeName>, taggers: seq<Tagger>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
+  datatype Program = Program(types: seq<TypeName>, datatypes: seq<DatatypeDecl>, taggers: seq<Tagger>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
   {
     // A raw program is well-formed when its identifiers resolve to declarations and some basic
     // properties hold:
@@ -25,6 +25,14 @@ module RawAst {
       && (forall typ <- types :: typ !in BuiltInTypes)
       // user-defined types have distinct names
       && (forall i, j :: 0 <= i < j < |types| ==> types[i] != types[j])
+      // datatype names do not use the names of built-in types
+      && (forall dt <- datatypes :: dt.name !in BuiltInTypes)
+      // datatype names do not conflict with user-defined types
+      && (forall dt <- datatypes :: dt.name !in types)
+      // datatype names are unique
+      && (forall i, j :: 0 <= i < j < |datatypes| ==> datatypes[i].name != datatypes[j].name)
+      // datatype declarations are well-formed
+      && (forall dt <- datatypes :: dt.WellFormed(this))
       // procedures have distinct names
       && (forall i, j :: 0 <= i < j < |procedures| ==> procedures[i].name != procedures[j].name)
       // procedure declarations are well-formed
@@ -40,6 +48,32 @@ module RawAst {
 
     predicate IsType(typ: TypeName) {
       typ in BuiltInTypes || typ in types
+    }
+  }
+
+  // Datatypes
+
+  datatype ConstructorField = ConstructorField(name: string, typ: TypeName)
+
+  datatype Constructor = Constructor(name: string, fields: seq<ConstructorField>)
+  {
+    predicate WellFormed(b3: Program) {
+      // field names are unique within the constructor
+      && (forall i, j :: 0 <= i < j < |fields| ==> fields[i].name != fields[j].name)
+      // field names are legal variable names
+      && (forall f <- fields :: LegalVariableName(f.name))
+      // field types are valid
+      && (forall f <- fields :: b3.IsType(f.typ))
+    }
+  }
+
+  datatype DatatypeDecl = DatatypeDecl(name: string, constructors: seq<Constructor>)
+  {
+    predicate WellFormed(b3: Program) {
+      // constructor names are unique within the datatype
+      && (forall i, j :: 0 <= i < j < |constructors| ==> constructors[i].name != constructors[j].name)
+      // each constructor is well-formed
+      && (forall c <- constructors :: c.WellFormed(b3))
     }
   }
 

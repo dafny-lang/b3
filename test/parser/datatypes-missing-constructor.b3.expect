@@ -1,0 +1,5 @@
+Error:
+5: datatype NoCtorName = (x: int)
+                         ^
+expected a identifier start character
+

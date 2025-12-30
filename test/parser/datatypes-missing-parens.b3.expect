@@ -1,0 +1,5 @@
+Error:
+5: datatype NoParens = Ctor x: int
+                            ^
+expected '('
+

@@ -1,0 +1,5 @@
+// RUN: %b3 parse --print "%s" > "%t" 2>&1
+// RUN: %diff "%s.expect" "%t"
+
+// Test: Missing equals sign  
+datatype BadEquals Ctor()

@@ -1,0 +1,5 @@
+Error:
+5: datatype = Ctor()
+            ^
+expected a identifier start character
+

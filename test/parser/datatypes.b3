@@ -1,0 +1,23 @@
+// RUN: %b3 parse --print "%s" > "%t"
+// RUN: %diff "%s.expect" "%t"
+datatype Unit = Unit()
+
+// Single-argument constructor
+datatype Box = Box(value: int)
+
+// Multiple-argument constructor
+datatype Pair = Pair(fst: int, snd: bool)
+
+// Multiple constructors
+datatype Option = None() | Some(value: int)
+
+// Recursive datatypes
+datatype List = Nil() | Cons(head: int, tail: List)
+datatype Tree = Leaf(value: int) | Node(left: Tree, right: Tree, data: int)
+
+// Nested datatype
+datatype Foo = A(value: int, l: List) | B(t: Tree)
+
+// Ensure parsing continues correctly
+type MyType
+function TestFunc(x: MyType): List

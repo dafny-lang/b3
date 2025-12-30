@@ -1,0 +1,19 @@
+// B3 program
+
+type MyType
+
+datatype Unit = Unit()
+
+datatype Box = Box(value: int)
+
+datatype Pair = Pair(fst: int, snd: bool)
+
+datatype Option = None() | Some(value: int)
+
+datatype List = Nil() | Cons(head: int, tail: List)
+
+datatype Tree = Leaf(value: int) | Node(left: Tree, right: Tree, data: int)
+
+datatype Foo = A(value: int, l: List) | B(t: Tree)
+
+function TestFunc(x: MyType): List

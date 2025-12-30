@@ -20,6 +20,8 @@ module Resolver {
   {
     var typeMap, types :- ResolveAllTypes(b3);
 
+    var _ :- ResolveAllDatatypes(b3, typeMap);
+
     var taggerMap, taggerFunctions :- ResolveAllTaggers(b3, typeMap);
     ConsequencesOfTagResolution(taggerMap, taggerFunctions);
 
@@ -86,6 +88,25 @@ module Resolver {
       types := types + [decl];
     }
     return Success(typeMap), types;
+  }
+
+  // TODO: implement datatype resolution
+  method ResolveAllDatatypes(b3: Raw.Program, typeMap: map<string, TypeDecl>) returns (r: Result<(), string>)
+    requires forall typename :: b3.IsType(typename) <==> typename in BuiltInTypes || typename in typeMap
+    ensures r.Success? ==>
+      // raw datatypes were well-formed
+      && (forall i, j :: 0 <= i < j < |b3.datatypes| ==> b3.datatypes[i].name != b3.datatypes[j].name)
+      && (forall d <- b3.datatypes :: d.WellFormed(b3))
+      // datatype names do not conflict with existing type names
+      && (forall d <- b3.datatypes :: d.name !in typeMap)
+      && (forall d <- b3.datatypes :: d.name !in BuiltInTypes)
+  {
+
+    if |b3.datatypes| == 0 {
+      return Success(());
+    }
+    
+    return Failure("datatype resolution not yet implemented");
   }
 
   method ResolveAllTaggers(b3: Raw.Program, typeMap: map<string, TypeDecl>) returns (r: Result<map<string, Function>, string>, taggerFunctions: seq<Function>)

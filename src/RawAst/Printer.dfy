@@ -11,6 +11,10 @@ module Printer {
       print "\n";
       TypeDecl(b3.types[i]);
     }
+    for i := 0 to |b3.datatypes| {
+      print "\n";
+      DatatypeDecl(b3.datatypes[i]);
+    }
     for i := 0 to |b3.taggers| {
       print "\n";
       TaggerDecl(b3.taggers[i]);
@@ -31,6 +35,32 @@ module Printer {
 
   method TypeDecl(ty: Types.TypeName) {
     print "type ", ty, "\n";
+  }
+
+  method DatatypeDecl(dt: DatatypeDecl) {
+    print "datatype ", dt.name, " = ";
+    var sep := "";
+    for i := 0 to |dt.constructors| {
+      print sep;
+      ConstructorDecl(dt.constructors[i]);
+      sep := " | ";
+    }
+    print "\n";
+  }
+
+  method ConstructorDecl(c: Constructor) {
+    print c.name, "(";
+    var sep := "";
+    for i := 0 to |c.fields| {
+      print sep;
+      ConstructorField(c.fields[i]);
+      sep := ", ";
+    }
+    print ")";
+  }
+
+  method ConstructorField(f: ConstructorField) {
+    print f.name, ": ", f.typ;
   }
 
   method TaggerDecl(tagger: Tagger) {
