@@ -28,7 +28,47 @@ module State {
     }
   }
 
-  datatype Variable = Variable(name: string, typ: Type)
+  datatype Variable = Variable(name: string, typ: Type) {
+    function FreshVar(vars: set<Variable>): Variable
+      ensures FreshVar(vars) !in vars
+      ensures FreshVar(vars).typ == typ
+    {
+      if vars == {} then this else
+        var m := MaxLenVar(vars);
+        if |name| > |m.name| then this else
+        Variable(name + "$" + m.name, typ)
+    }
+  }
+
+  function MaxLenVar(s: set<Variable>): (m: Variable)
+    requires s != {}
+    ensures m in s && forall z :: z in s ==> |z.name| <= |m.name|
+  // {
+  //   var x :| x in s;
+  //   if s == {x} then
+  //     x
+  //   else
+  //     var s' := s - {x};
+  //     assert s == s' + {x};
+  //     var y := MaxLenVar(s');
+  //     if |x.name| >= |y.name| then x else y
+  // } by method {
+  //   m :| m in s;
+  //   var r := s - {m};
+  //   while r != {}
+  //     invariant r < s
+  //     invariant m in s && forall z :: z in s - r ==> |z.name| <= |m.name|
+  //   {
+  //     var x :| x in r;
+  //     assert forall z :: z in s - (r - {x}) ==> z in s - r || z == x;
+  //     r := r - {x};
+  //     if |m.name| < |x.name| {
+  //       m := x;
+  //     }
+  //   }
+  //   assert s - {} == s;
+  //   assert m in s && forall z :: z in s ==> |z.name| <= |m.name|;
+  // }
 
   // function Singleton(val: M.Any): State
   // {
@@ -114,25 +154,21 @@ module State {
     ghost function EqExcept(vars: set<Variable>) : iset<State>
     {
       iset st': State | 
-        && st'.Keys == this.Keys
+        && st'.Keys <= Keys
         && forall v: Variable :: v in st'.Keys && v !in vars ==> st'[v] == this[v]
     }
 
   }
 
-  // function Tail(n: nat, ss: State): State {
-  //   if |ss| <= n then [] else ss[n..]
-  // }
+  ghost function UpdateSet(vars: set<Variable>, post: iset<State>): iset<State> 
+  {
+    iset st: State | st.Without(vars) in post 
+  }
 
-  // ghost function UpdateSet(n: nat, post: iset<State>): iset<State> 
-  // {
-  //   iset st: State | Tail(n, st) in post 
-  // }
+  ghost const   AllStates: iset<State> := iset st: State | true
 
-  ghost const AllStates: iset<State> := iset st: State | true
-
-  // ghost function DeleteSet(n: nat, post: iset<State>): iset<State> {
-  //   iset st: State {:trigger} | exists st' <- post :: st == Tail(n, st')
-  // }
+  ghost function DeleteSet(vars: set<Variable>, post: iset<State>): iset<State> {
+    iset st: State {:trigger} | exists st' <- post :: st == st'.Without(vars)
+  }
 
 }

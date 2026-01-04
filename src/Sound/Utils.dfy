@@ -20,49 +20,49 @@ module Utils {
         Index(ss[1..], e) + 1
   }
 
-  // function Max(s: set<nat>): (m: nat)
-  //   requires s != {}
-  //   ensures m in s && forall z :: z in s ==> z <= m
-  // {
-  //   var x :| x in s;
-  //   if s == {x} then
-  //     x
-  //   else
-  //     var s' := s - {x};
-  //     assert s == s' + {x};
-  //     var y := Max(s');
-  //     max(x, y)
-  // } by method {
-  //   m :| m in s;
-  //   var r := s - {m};
-  //   while r != {}
-  //     invariant r < s
-  //     invariant m in s && forall z :: z in s - r ==> z <= m
-  //   {
-  //     var x :| x in r;
-  //     assert forall z :: z in s - (r - {x}) ==> z in s - r || z == x;
-  //     r := r - {x};
-  //     if m < x {
-  //       m := x;
-  //     }
-  //   }
-  //   assert s - {} == s;
-  // }
+  function Max(s: set<nat>): (m: nat)
+    requires s != {}
+    ensures m in s && forall z :: z in s ==> z <= m
+  {
+    var x :| x in s;
+    if s == {x} then
+      x
+    else
+      var s' := s - {x};
+      assert s == s' + {x};
+      var y := Max(s');
+      max(x, y)
+  } by method {
+    m :| m in s;
+    var r := s - {m};
+    while r != {}
+      invariant r < s
+      invariant m in s && forall z :: z in s - r ==> z <= m
+    {
+      var x :| x in r;
+      assert forall z :: z in s - (r - {x}) ==> z in s - r || z == x;
+      r := r - {x};
+      if m < x {
+        m := x;
+      }
+    }
+    assert s - {} == s;
+  }
 
-  // function Max'(s: set<nat>): (m: nat)
-  //   ensures (s == {} || m in s) && forall z :: z in s ==> z <= m
-  // {
-  //   if s == {} then 0 else Max(s)
-  // }
+  function Max'(s: set<nat>): (m: nat)
+    ensures (s == {} || m in s) && forall z :: z in s ==> z <= m
+  {
+    if s == {} then 0 else Max(s)
+  }
 
-  // lemma MaxLemma(s: set<nat>, i: nat, m: nat)
-  //   requires i + m in s
-  //   ensures i <= Max(s) - m
-  // {
-  //   if s != {} {
-  //     var x :| x in s;
-  //   }
-  // }
+  lemma MaxLemma(s: set<nat>, i: nat, m: nat)
+    requires i + m in s
+    ensures i <= Max(s) - m
+  {
+    if s != {} {
+      var x :| x in s;
+    }
+  }
 
   // function SeqTail<T>(n: nat, ss: seq<T>): seq<T> {
   //   if |ss| <= n then [] else ss[n..]
