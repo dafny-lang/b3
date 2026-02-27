@@ -14,6 +14,7 @@ module B3 {
   import StaticConsistency
   import Verifier
   import CLI = CommandLineOptions
+  import StdinReader
 
   class B3CliSyntax extends CLI.Syntax<Verb> {
     constructor () {
@@ -39,13 +40,34 @@ module B3 {
       case "print-incarnations" => CLI.OptionInfo.ArgumentCount(0)
       case "cvc5" => CLI.OptionInfo.ArgumentCount(0)
       case "z3" => CLI.OptionInfo.ArgumentCount(0)
+      case "stdin" => CLI.OptionInfo.ArgumentCount(0)
       case _ => CLI.OptionInfo.Unknown
+    }
+
+    predicate IsStdinOption(name: string) {
+      name == "stdin"
+    }
+
+    method GetOptionsHelp() returns (help: string) {
+      help := "\nOptions:\n" +
+              "  --print                      Print the raw AST\n" +
+              "  --rprint                     Print the resolved AST\n" +
+              "  --solver-log                 Show SMT solver log\n" +
+              "  --solver-log-no-options      Show SMT solver log without options\n" +
+              "  --solver-failure             Show solver failures\n" +
+              "  --show-proof-obligations     Show proof obligations\n" +
+              "  --print-incarnations         Print incarnations\n" +
+              "  --z3                         Use Z3 solver (default)\n" +
+              "  --cvc5                       Use CVC5 solver\n" +
+              "  --stdin                      Read b3 program from stdin\n";
     }
   }
 
   datatype Verb = Parse | Resolve | Verify
 
-  method Main(args: seq<string>) {
+  method Main(args: seq<string>)
+    decreases *
+  {
     var syntax := new B3CliSyntax();
     var cliResult := CLI.Parse(syntax, args);
     if cliResult.Failure? {
@@ -55,20 +77,31 @@ module B3 {
     var cli := cliResult.value;
     
     var rawb3;
-    match |cli.files| {
-      case 0 =>
-        print "No files given on command line\n";
+    if "stdin" in cli.options {
+      // Read from stdin
+      var r := ReadAndParseFromStdin();
+      if r.IsFailure() {
+        print r.error, "\n";
         return;
-      case 1 =>
-        var r := ReadAndParseProgram(cli.files[0]);
-        if r.IsFailure() {
-          print r.error, "\n";
+      }
+      rawb3 := r.value;
+    } else {
+      // Read from file
+      match |cli.files| {
+        case 0 =>
+          print "No files given on command line\n";
           return;
-        }
-        rawb3 := r.value;
-      case _ =>
-        print "Only 1 filename is supported\n";
-        return;
+        case 1 =>
+          var r := ReadAndParseProgram(cli.files[0]);
+          if r.IsFailure() {
+            print r.error, "\n";
+            return;
+          }
+          rawb3 := r.value;
+        case _ =>
+          print "Only 1 filename is supported\n";
+          return;
+      }
     }
 
     if "print" in cli.options {
@@ -99,6 +132,18 @@ module B3 {
       case ParseFailure(_, _) => Failure(SB.FailureToString(input, parseResult))
     };
    return Success(b3);
+  }
+
+  method ReadAndParseFromStdin() returns (r: Result<RawAst.Program, string>)
+    decreases *
+  {
+    var input :- StdinReader.ReadStdin();
+    var parseResult := SB.Apply(Parser.TopLevel, input);
+    var b3 :- match parseResult {
+      case ParseSuccess(value, remaining) => Success(value)
+      case ParseFailure(_, _) => Failure(SB.FailureToString(input, parseResult))
+    };
+    return Success(b3);
   }
 
   method ResolveAndTypeCheck(rawb3: RawAst.Program, cli: CLI.CliResult) returns (r: Result<Ast.Program, string>)

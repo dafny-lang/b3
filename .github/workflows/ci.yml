@@ -46,3 +46,67 @@ jobs:
         else
           make lit-cvc5
         fi
+
+  test-java:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install lit OutputCheck
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y z3
+    
+    - name: "Install Dafny"
+      uses: dafny-lang/setup-dafny-action@v1
+      with:
+        dafny-version: "4.11.0"
+    
+    - name: Build Java
+      run: make quick-java
+    
+    - name: Test Java stdin
+      run: |
+        cat test/parser/stdin-parse.b3 | java -jar target/java/bin/b3.jar parse --stdin --print > /tmp/output.txt
+        diff test/parser/stdin-parse.b3.expect /tmp/output.txt
+        cat test/verifier/stdin-verify.b3 | java -jar target/java/bin/b3.jar verify --stdin > /tmp/verify.txt
+        diff test/verifier/stdin-verify.b3.expect /tmp/verify.txt
+
+  test-cs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install lit OutputCheck
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y z3
+    
+    - name: "Install Dafny"
+      uses: dafny-lang/setup-dafny-action@v1
+      with:
+        dafny-version: "4.11.0"
+    
+    - name: Build C#
+      run: |
+        cd target/cs
+        dafny build --no-verify --target=cs src/dfyconfig.toml --output bin/b3
+    
+    - name: Test C# stdin
+      run: |
+        cat test/parser/stdin-parse.b3 | target/cs/bin/b3 parse --stdin --print > /tmp/output.txt
+        diff test/parser/stdin-parse.b3.expect /tmp/output.txt
+        cat test/verifier/stdin-verify.b3 | target/cs/bin/b3 verify --stdin > /tmp/verify.txt
+        diff test/verifier/stdin-verify.b3.expect /tmp/verify.txt
