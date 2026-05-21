@@ -5,6 +5,7 @@ module Incarnations {
   import opened SolverExpr
   import Types
   import RSolvers
+  import Sorting
 
   export
     reveals DeclMappings
@@ -57,20 +58,17 @@ module Incarnations {
 
     method Print(header: string := "") {
       print "==== Incarnations: ", header, "\n";
-
       print "  nextSequenceCount:\n";
-      var ss := nextSequenceCount.Keys;
-      while ss != {} {
-        var s :| s in ss;
-        ss := ss - {s};
+      var ss := Sorting.SortedStrings(nextSequenceCount.Keys);
+      for i := 0 to |ss| {
+        var s := ss[i];
         print "    ", s, " := ", nextSequenceCount[s], "\n";
       }
 
       print "  m:\n";
-      var vv := m.Keys;
-      while vv != {} {
-        var v: Variable :| v in vv;
-        vv := vv - {v};
+      var vv := Sorting.Sorted(m.Keys, (a: Variable, b: Variable) => Sorting.CompareStrings(a.name, b.name));
+      for i := 0 to |vv| {
+        var v := vv[i];
         print "    ", v.name, " := ", m[v].name, "\n";
       }
     }
