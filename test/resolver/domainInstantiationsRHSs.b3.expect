@@ -1,0 +1,36 @@
+// Resolved B3 program
+
+domain Domain
+{
+  // type Domain
+}
+
+domain DS(X)
+{
+  // type DS
+
+  // type X
+}
+
+domain DT(X, Y)
+{
+  // type DT
+
+  // type X
+
+  // type Y
+}
+
+type MyDomain
+
+type DSInt
+
+type DSBool
+
+type DSMyDomain
+
+type DT0
+
+type DT1
+
+type DT2

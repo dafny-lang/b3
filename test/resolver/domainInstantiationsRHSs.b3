@@ -1,0 +1,18 @@
+// RUN: %b3 resolve --rprint "%s" > "%t"
+// RUN: %diff "%s.expect" "%t"
+
+domain Domain { }
+
+domain DS(X) { }
+
+domain DT(X, Y) { }
+
+type MyDomain := Domain
+
+type DSInt := DS(int)
+type DSBool := DS(bool)
+type DSMyDomain := DS(MyDomain)
+
+type DT0 := DT(int, int)
+type DT1 := DT(bool, DT0)
+type DT2 := DT(DT2, DT2)

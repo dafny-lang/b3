@@ -26,6 +26,8 @@ module Resolver {
 
     var typeMap, types :- ResolveAllTypes(b3, typeParameters);
 
+    var _ :- ResolveDomainInstantiations(b3, domainMap, typeMap);
+
     var taggerMap, taggerFunctions :- ResolveAllTaggers(b3, typeMap);
     ConsequencesOfTagResolution(taggerMap, taggerFunctions);
 
@@ -164,6 +166,32 @@ module Resolver {
     }
 
     return Success(typeMap), types;
+  }
+
+  method ResolveDomainInstantiations(b3: Raw.Program, domainMap: map<string, Domain>, typeMap: map<string, TypeDecl>) returns (r: Result<(), string>)
+  {
+    for n := 0 to |b3.types|
+    {
+      match b3.types[n].domainInstantiation
+      case None =>
+      case Some(instantiation) =>        
+        var domainName := instantiation.name;
+        if domainName !in domainMap {
+          return Failure("unknown domain: " + domainName);
+        }
+        var domain := domainMap[domainName];
+        if |domain.params| != |instantiation.typeArguments| {
+          var got := Int2String(|instantiation.typeArguments|);
+          var expected := Int2String(|domain.params|);
+          return Failure("domain instantiation has wrong number of type arguments: " + domainName + " (got " + got + ", expected " + expected + ")");
+        }
+        for j := 0 to |instantiation.typeArguments|
+        {
+          var resolvedType :- ResolveType(instantiation.typeArguments[j], typeMap);
+        }
+    }
+
+    return Success(());
   }
 
   method ResolveAllTaggers(b3: Raw.Program, typeMap: map<string, TypeDecl>) returns (r: Result<map<string, Function>, string>, taggerFunctions: seq<Function>)

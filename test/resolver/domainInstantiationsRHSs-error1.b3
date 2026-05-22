@@ -1,0 +1,6 @@
+// RUN: %b3 resolve --rprint "%s" > "%t"
+// RUN: %diff "%s.expect" "%t"
+
+domain DS(X) { }
+
+type MyDS := DS // error: wrong number of arguments
