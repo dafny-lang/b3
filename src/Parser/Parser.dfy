@@ -186,7 +186,7 @@ module Parser {
 
   datatype TopLevelDecl =
     | TDomain(domainDecl: Domain)
-    | TType(typeDecl: Types.TypeName)
+    | TType(typeDecl: TypeDecl)
     | TTagger(taggerDecl: Tagger)
     | TFunction(funcDecl: Function)
     | TAxiom(axiomDecl: Axiom)
@@ -205,7 +205,7 @@ module Parser {
        ])
   }
 
-  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Domain>, seq<Types.TypeName>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
+  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Domain>, seq<TypeDecl>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
     if decls == [] then ([], [], [], [], [], []) else
       var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls[1..]);
       match decls[0]
@@ -232,8 +232,15 @@ module Parser {
     ))
   }
 
-  const parseTypeDecl: B<Types.TypeName> :=
-    T("type").e_I(parseId)
+  const parseTypeDecl: B<TypeDecl> :=
+    T("type").e_I(parseId).I_I(Sym(":=").e_I(parseInstantiation).Option()).M2(MId, (name, maybeInstantiation) => TypeDecl(name, maybeInstantiation))
+
+  const parseInstantiation: B<DomainInstantiation> :=
+    parseId.Then(name =>
+      parseParenthesized(parseCommaDelimitedSeq(parseType)).Option().M((maybeArguments: Option<seq<Types.TypeName>>) =>
+        var typeArguments := if maybeArguments == None then [] else maybeArguments.value;
+        DomainInstantiation(name, typeArguments)
+    ))
 
   const parseTaggerDecl: B<Tagger> :=
     T("tagger").e_I(parseId).I_e(T("for")).I_I(parseType).M2(MId, (name, typeName) => Tagger(name, typeName))

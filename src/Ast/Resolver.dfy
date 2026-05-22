@@ -103,9 +103,9 @@ module Resolver {
     requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
     ensures r.Success? ==> var typeMap := r.value;
       // raw types were well-formed
-      && typeMap.Keys == (set param <- typeParameters :: param.Name) + (set typename <- b3.types)
+      && typeMap.Keys == (set param <- typeParameters :: param.Name) + (set typeDecl: Raw.TypeDecl <- b3.types :: typeDecl.name)
       && NameAlignment(typeMap)
-      && (forall typename <- b3.types :: typename !in BuiltInTypes)
+      && (forall typeDecl <- b3.types :: typeDecl.name !in BuiltInTypes)
       && (forall i, j :: 0 <= i < j < |b3.types| ==> b3.types[i] != b3.types[j])
       // resolved type declarations have distinct names
       && (forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name)
@@ -139,11 +139,11 @@ module Resolver {
     // Add the types declared in the program/domain
     for n := 0 to |b3.types|
       // typeMap maps type parameters and user-defined types seen so far to distinct type-declaration objects
-      invariant typeMap.Keys == typeParameterNames + set typename <- b3.types[..n]
+      invariant typeMap.Keys == typeParameterNames + set typeDecl <- b3.types[..n] :: typeDecl.name
       // typeMap organizes type-declaration objects correctly according to their names
       invariant NameAlignment(typeMap)
       // no user-defined type seen so far uses the name of a built-in type
-      invariant forall typename <- b3.types[..n] :: typename !in BuiltInTypes
+      invariant forall typeDecl <- b3.types[..n] :: typeDecl.name !in BuiltInTypes
       // user-defined types seen so far have distinct names
       invariant forall i, j :: 0 <= i < j < n ==> b3.types[i] != b3.types[j]
       // resolved type declarations have distinct names
@@ -151,7 +151,7 @@ module Resolver {
       // typeMap.Keys/types correspondence
       invariant LinearForm(typeMap, types)
     {
-      var name := b3.types[n];
+      var name := b3.types[n].name;
       if name in BuiltInTypes {
         return Result<map<string, TypeDecl>, string>.Failure("user-defined type is not allowed to have the name of a built-in type: " + name), types;
       } else if name in typeMap {

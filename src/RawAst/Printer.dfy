@@ -63,8 +63,17 @@ module Printer {
     Indent(indent, "}\n");
   }
 
-  method TypeDecl(ty: Types.TypeName, indent: nat) {
-    print "type ", ty, "\n";
+  method TypeDecl(ty: TypeDecl, indent: nat) {
+    print "type ", ty.name;
+    match ty.domainInstantiation {
+      case None =>
+      case Some(instantiation) =>
+        print " := ", instantiation.name;
+        if instantiation.typeArguments != [] {
+          print "(", Comma(instantiation.typeArguments, ", "), ")";
+        }
+    }
+    print "\n";
   }
 
   method TaggerDecl(tagger: Tagger, indent: nat) {

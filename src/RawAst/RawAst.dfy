@@ -9,7 +9,7 @@ module RawAst {
   // A raw program reflects program that has been parsed.
   datatype Program = Program(
     domains: seq<Domain>,
-    types: seq<TypeName>,
+    types: seq<TypeDecl>,
     taggers: seq<Tagger>,
     functions: seq<Function>,
     axioms: seq<Axiom>,
@@ -28,7 +28,7 @@ module RawAst {
     //    - additional semantic rules
     predicate WellFormed() {
       // user-defined types do not use the names of built-in types
-      && (forall typ <- types :: typ !in BuiltInTypes)
+      && (forall typ <- types :: typ.name !in BuiltInTypes)
       // user-defined types have distinct names
       && (forall i, j :: 0 <= i < j < |types| ==> types[i] != types[j])
       // procedures have distinct names
@@ -45,7 +45,7 @@ module RawAst {
     }
 
     predicate IsType(typ: TypeName) {
-      typ in BuiltInTypes || typ in types
+      typ in BuiltInTypes || exists t <- types :: typ == t.name
     }
   }
 
@@ -55,6 +55,26 @@ module RawAst {
   {
     predicate WellFormed(b3: Program) {
       members.WellFormed()
+    }
+  }
+
+  // Domain instantiations
+
+  datatype DomainInstantiation = DomainInstantiation(name: string, typeArguments: seq<TypeName>)
+  {
+    predicate WellFormed(b3: Program) {
+      && (exists d <- b3.domains :: d.name == name && |d.params| == |typeArguments|)
+      && (forall typ <- typeArguments :: b3.IsType(typ))
+    }
+  }
+
+  // Type declarations and domain instantiations
+
+  datatype TypeDecl = TypeDecl(name: string, domainInstantiation: Option<DomainInstantiation>)
+  {
+    predicate WellFormed(b3: Program) {
+      && LegalVariableName(name)
+      && (domainInstantiation.Some? ==> domainInstantiation.value.WellFormed(b3))
     }
   }
 

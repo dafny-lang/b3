@@ -7,6 +7,9 @@ domain Domain {
   function F(): int
 }
 
+type MyDomain := Domain
+type YourDomain := Domain
+
 domain DR() {
 }
 
@@ -24,9 +27,17 @@ domain DS(X) {
     G(true) < 10
 }
 
+type DSInt := DS(int)
+type DSBool := DS(bool)
+type DSMyDomain := DS(MyDomain)
+
 domain DT(X, Y) {
   procedure OnlyBodyless(u: int, out w: int)
     ensures u <= w
 
   procedure Q(dt: DT, x: X, y: Y)
 }
+
+type DT0 := DT(int, int)
+type DT1 := DT(bool, DT0)
+type DT2 := DT(DT2, DT2)

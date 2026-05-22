@@ -34,3 +34,19 @@ domain DT(X, Y)
 }
 
 type Outside
+
+type MyDomain := Domain
+
+type YourDomain := Domain
+
+type DSInt := DS(int)
+
+type DSBool := DS(bool)
+
+type DSMyDomain := DS(MyDomain)
+
+type DT0 := DT(int, int)
+
+type DT1 := DT(bool, DT0)
+
+type DT2 := DT(DT2, DT2)
