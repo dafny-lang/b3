@@ -9,6 +9,7 @@ module Ast {
 
   export
     reveals NamedDecl, NamedDecl.Distinct, TypeDecl, Type
+    provides TypeDecl.FromDomainSignature
     provides NamedDecl.Name, Type.ToString
     reveals Program, Type, Variable, Procedure, Label, PParameter, LocalVariable
     reveals Domain
@@ -49,10 +50,13 @@ module Ast {
   }
 
   class TypeDecl extends NamedDecl {
-    constructor (name: string)
+    const FromDomainSignature: bool
+  
+    constructor (name: string, fromDomainSignature: bool)
       ensures Name == name
     {
       Name := name;
+      FromDomainSignature := fromDomainSignature;
     }
   }
 

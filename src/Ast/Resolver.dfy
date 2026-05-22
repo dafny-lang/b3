@@ -20,7 +20,7 @@ module Resolver {
     ensures r.Success? ==> b3.WellFormed() && r.value.WellFormed()
     decreases b3
   {
-    assume typeParameters == []; // TODO
+    assume {:axiom} typeParameters == []; // TODO
 
     var domainMap, domains :- ResolveAllDomains(b3);
 
@@ -71,7 +71,7 @@ module Resolver {
       if name in domainMap {
         return Failure("duplicate domain name: " + name), domains;
       }
-      var self := new TypeDecl(name);
+      var self := new TypeDecl(name, true);
       ghost var typesForUseInDomainBody := [self];
 
       var params := [];
@@ -85,7 +85,7 @@ module Resolver {
         } else if exists priorTypeParam: TypeDecl <- params :: priorTypeParam.Name == typeParamName {
           return Failure("duplicate domain type parameter name: '" + typeParamName + "'"), domains;
         }
-        var typeParam := new TypeDecl(typeParamName);
+        var typeParam := new TypeDecl(typeParamName, true);
         params := params + [typeParam];
         typesForUseInDomainBody := typesForUseInDomainBody + [typeParam];
       }
@@ -112,11 +112,31 @@ module Resolver {
       // typeMap.Keys/types correspondence
       && LinearForm(r.value, types)
   {
-    var typeParameterNames := set param <- typeParameters :: param.Name;
-    assume typeParameterNames == {}; // TODO
-
     var typeMap: map<string, TypeDecl> := map[];
     types := [];
+
+    // Add the type parameters as type declarations
+    for n := 0 to |typeParameters|
+      invariant typeMap.Keys == set param: TypeDecl <- typeParameters[..n] :: param.Name
+      invariant NameAlignment(typeMap)
+      invariant forall i, j :: 0 <= i < j < n ==> typeParameters[i].Name != typeParameters[j].Name
+      invariant forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name
+      invariant LinearForm(typeMap, types)
+    {
+      var param := typeParameters[n];
+      var name := param.Name;
+      assert name !in typeMap;
+      if name in BuiltInTypes {
+        return Result<map<string, TypeDecl>, string>.Failure("type parameter is not allowed to have the name of a built-in type: " + name), types;
+      }
+      NewNamePreservesLinearForm(name, param, typeMap, types);
+      typeMap := typeMap[name := param];
+      types := types + [param];
+    }
+    ghost var typeParameterNames := set param <- typeParameters :: param.Name;
+    assert typeMap.Keys == typeParameterNames;
+
+    // Add the types declared in the program/domain
     for n := 0 to |b3.types|
       // typeMap maps type parameters and user-defined types seen so far to distinct type-declaration objects
       invariant typeMap.Keys == typeParameterNames + set typename <- b3.types[..n]
@@ -128,7 +148,7 @@ module Resolver {
       invariant forall i, j :: 0 <= i < j < n ==> b3.types[i] != b3.types[j]
       // resolved type declarations have distinct names
       invariant forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name
-      // typeMap.Keys/types correspondence 
+      // typeMap.Keys/types correspondence
       invariant LinearForm(typeMap, types)
     {
       var name := b3.types[n];
@@ -137,11 +157,12 @@ module Resolver {
       } else if name in typeMap {
         return Failure("duplicate type name: " + name), types;
       }
-      var decl := new TypeDecl(name);
+      var decl := new TypeDecl(name, false);
       NewNamePreservesLinearForm(name, decl, typeMap, types);
       typeMap := typeMap[name := decl];
       types := types + [decl];
     }
+
     return Success(typeMap), types;
   }
 
