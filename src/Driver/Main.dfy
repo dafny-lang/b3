@@ -158,7 +158,7 @@ module B3 {
     ensures r.Success? ==> var b3 := r.value;
       b3.WellFormed() && TypeChecker.TypeCorrect(b3) && StaticConsistency.Consistent(b3)
   {
-    var b3 :- Resolver.Resolve(rawb3, []);
+    var b3, _ :- Resolver.Resolve(rawb3, []);
 
     if "rprint" in cli.options {
       ResolvedPrinter.Program(b3);

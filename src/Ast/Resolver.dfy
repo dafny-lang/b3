@@ -15,29 +15,36 @@ module Resolver {
   import opened StmtResolver
   import opened ExprResolver
 
-  ghost predicate GoodTypeMap(b3: Raw.Program, typeMap: map<string, TypeDecl>) {
-    forall typename :: b3.IsType(typename) <==> typename in BuiltInTypes || typename in typeMap
+  ghost predicate GoodTypeMap(b3: Raw.Program, typeMap: map<string, TypeDecl>, generatedTypes: set<string> := {}) {
+    forall typename :: b3.IsType(typename) || typename in generatedTypes <==> typename in BuiltInTypes || typename in typeMap
   }
 
-  method Resolve(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<Ast.Program, string>)
+  method Resolve(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<Ast.Program, string>, ghost generatedTypes: set<string>)
     requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
     requires b3.signatureTypes == set param <- typeParameters :: param.Name
-    ensures r.Success? ==> b3.WellFormed() && r.value.WellFormed()
+    ensures r.Success? ==> b3.WellFormed(generatedTypes) && r.value.WellFormed()
     decreases b3
   {
+    generatedTypes := {};
     var domainMap, domains :- ResolveAllDomains(b3);
 
     var typeMap, types :- ResolveAllTypes(b3, typeParameters);
     ghost var typeParameterNames := set param <- typeParameters :: param.Name;
 
+    // Note, by resolving all domain-instantiation RHSs before actually instantiating the domains, we avoid the possibility
+    // of a domain-instantiation RHS referring to a type that is defined in a domain that is being instantiated. That is,
+    // we avoid ordering dependencies among domains. With more advanced uses of domains, it would be good to extend the
+    // language to allow some such dependencies.
     var resolvedInstantiations :- ResolveDomainInstantiations(b3, domainMap, typeMap);
+    var instTypes, instFunctions, instAxioms, instProcedures := InstantiateDomains(b3, resolvedInstantiations);
+    typeMap, generatedTypes := AddGeneratedTypes(b3, typeMap, instTypes);
 
-    var taggerMap, taggerFunctions :- ResolveAllTaggers(b3, typeMap);
+    var taggerMap, taggerFunctions :- ResolveAllTaggers(b3, typeMap, generatedTypes);
     ConsequencesOfTagResolution(taggerMap, taggerFunctions);
 
-    var functionMap, functions, generatedAxioms :- ResolveAllFunctions(b3, typeMap, taggerMap);
+    var functionMap, functions, generatedAxioms :- ResolveAllFunctions(b3, typeMap, generatedTypes, taggerMap);
 
-    var ers := ExprResolverState(b3, typeMap, taggerMap + functionMap);
+    var ers := ExprResolverState(b3, typeMap, generatedTypes, taggerMap + functionMap);
     assert ers.Valid();
     assert fresh(ers.functionMap.Values) by {
       assert ers.functionMap.Values == taggerMap.Values + functionMap.Values;
@@ -55,7 +62,7 @@ module Resolver {
     var r3 := Program(domains, types, taggerFunctions + functions, generatedAxioms + axioms, procedures);
     DistinctConcat(taggerMap, taggerFunctions, functionMap, functions);
 
-    return Success(r3);
+    return Success(r3), generatedTypes;
   }
 
   method ResolveAllDomains(b3: Raw.Program) returns (r: Result<map<string, Domain>, string>, domains: seq<Domain>)
@@ -111,7 +118,7 @@ module Resolver {
           set parameterTypeName <- names;
         }
       }
-      var resolvedMembers :- Resolve(domain.members, typesForUseInDomainBody);
+      var resolvedMembers, _ :- Resolve(domain.members, typesForUseInDomainBody);
 
       var decl := Domain(self, params, resolvedMembers);
       domainMap := domainMap[name := decl];
@@ -224,8 +231,32 @@ module Resolver {
     return Success(resolvedInstantiations);
   }
 
-  method ResolveAllTaggers(b3: Raw.Program, typeMap: map<string, TypeDecl>) returns (r: Result<map<string, Function>, string>, taggerFunctions: seq<Function>)
+  method InstantiateDomains(b3: Raw.Program, resolvedInstantiations: seq<ResolvedInstantiation>) returns (instTypes: seq<TypeDecl>, instFunctions: seq<Function>, instAxioms: seq<Axiom>, instProcedures: seq<Procedure>)
+  {
+    instTypes, instFunctions, instAxioms, instProcedures := [], [], [], [];
+    for i := 0 to |resolvedInstantiations|
+    {
+      var instantiation := resolvedInstantiations[i];
+      // TODO
+    }
+  }
+
+  method AddGeneratedTypes(ghost b3: Raw.Program, typeMap: map<string, TypeDecl>, instTypes: seq<TypeDecl>) returns (newTypeMap: map<string, TypeDecl>, generatedTypes: set<string>)
     requires GoodTypeMap(b3, typeMap)
+    ensures GoodTypeMap(b3, newTypeMap, generatedTypes)
+  {
+    newTypeMap, generatedTypes := typeMap, {};
+    for i := 0 to |instTypes|
+      invariant GoodTypeMap(b3, newTypeMap, generatedTypes)
+    {
+      var typ := instTypes[i];
+      newTypeMap := newTypeMap[typ.Name := typ];
+      generatedTypes := generatedTypes + {typ.Name};
+    }
+  }
+
+  method ResolveAllTaggers(b3: Raw.Program, typeMap: map<string, TypeDecl>, ghost generatedTypes: set<string>) returns (r: Result<map<string, Function>, string>, taggerFunctions: seq<Function>)
+    requires GoodTypeMap(b3, typeMap, generatedTypes)
     ensures r.Success? ==>
       // raw taggers were well-formed
       && (forall i, j :: 0 <= i < j < |b3.taggers| ==> b3.taggers[i].name != b3.taggers[j].name)
@@ -297,15 +328,15 @@ module Resolver {
     }
   }
 
-  method ResolveAllFunctions(b3: Raw.Program, typeMap: map<string, TypeDecl>, taggerMap: map<string, Function>)
+  method ResolveAllFunctions(b3: Raw.Program, typeMap: map<string, TypeDecl>, ghost generatedTypes: set<string>, taggerMap: map<string, Function>)
       returns (r: Result<map<string, Function>, string>, functions: seq<Function>, axioms: seq<Axiom>)
-    requires GoodTypeMap(b3, typeMap)
+    requires GoodTypeMap(b3, typeMap, generatedTypes)
     requires NameAlignment(taggerMap)
     requires forall taggerName <- taggerMap :: taggerMap[taggerName].WellFormedAsTagger()
     ensures r.Success? ==>
       // raw functions had distinct names and were well-formed
       && (forall i, j :: 0 <= i < j < |b3.functions| ==> b3.functions[i].name != b3.functions[j].name)
-      && (forall func <- b3.functions :: func.WellFormed(b3))
+      && (forall func <- b3.functions :: func.WellFormed(b3, generatedTypes))
     ensures r.Success? ==> var functionMap := r.value;
       && taggerMap.Keys !! functionMap.Keys
       && NameAlignment(functionMap)
@@ -330,7 +361,7 @@ module Resolver {
       // properties of the raw functions seen so far
       invariant forall i, j :: 0 <= i < j < n ==> b3.functions[i].name != b3.functions[j].name
       invariant forall func <- b3.functions[..n] :: func.name in functionMap
-      invariant forall func <- b3.functions[..n] :: func.SignatureWellFormed(b3) && functionMap[func.name].SignatureCorrespondence(func)
+      invariant forall func <- b3.functions[..n] :: func.SignatureWellFormed(b3, generatedTypes) && functionMap[func.name].SignatureCorrespondence(func)
       // properties of functionMap
       invariant taggerMap.Keys !! functionMap.Keys
       invariant NameAlignment(functionMap)
@@ -344,7 +375,7 @@ module Resolver {
       var func := b3.functions[n];
       var name := func.name;
       var _ :- CheckNameDuplication(name, taggerMap, functionMap, "");
-      var rFunc :- ResolveFunctionSignature(func, b3, typeMap, taggerMap);
+      var rFunc :- ResolveFunctionSignature(func, b3, typeMap, generatedTypes, taggerMap);
       NewNamePreservesLinearForm(name, rFunc, functionMap, functions);
       functionMap := functionMap[name := rFunc];
       functions := functions + [rFunc];
@@ -373,10 +404,10 @@ module Resolver {
       axioms := axioms + generatedAxioms;
     }
 
-    var ers := ExprResolverState(b3, typeMap, taggerMap + functionMap);
+    var ers := ExprResolverState(b3, typeMap, generatedTypes, taggerMap + functionMap);
     for n := 0 to |b3.functions|
-      invariant forall func <- b3.functions :: func.SignatureWellFormed(b3) && functionMap[func.name].SignatureCorrespondence(func)
-      invariant forall func <- b3.functions[..n] :: func.WellFormed(b3) && functionMap[func.name].WellFormed()
+      invariant forall func <- b3.functions :: func.SignatureWellFormed(b3, generatedTypes) && functionMap[func.name].SignatureCorrespondence(func)
+      invariant forall func <- b3.functions[..n] :: func.WellFormed(b3, generatedTypes) && functionMap[func.name].WellFormed()
       invariant forall func <- functions :: func.WellFormed()
     {
       var func := b3.functions[n];
@@ -414,16 +445,16 @@ module Resolver {
     return Success(());
   }
 
-  method ResolveFunctionSignature(func: Raw.Function, b3: Raw.Program, typeMap: map<string, TypeDecl>, taggerMap: map<string, Function>) returns (r: Result<Function, string>)
-    requires GoodTypeMap(b3, typeMap)
+  method ResolveFunctionSignature(func: Raw.Function, b3: Raw.Program, typeMap: map<string, TypeDecl>, ghost generatedTypes: set<string>, taggerMap: map<string, Function>) returns (r: Result<Function, string>)
+    requires GoodTypeMap(b3, typeMap, generatedTypes)
     requires forall taggerName <- taggerMap :: taggerMap[taggerName].Name == taggerName && taggerMap[taggerName].WellFormedAsTagger()
-    ensures r.Success? ==> func.SignatureWellFormed(b3)
+    ensures r.Success? ==> func.SignatureWellFormed(b3, generatedTypes)
     ensures r.Success? ==> fresh(r.value) && r.value.SignatureCorrespondence(func) && r.value.WellFormed()
   {
     var paramMap: map<string, Variable> := map[];
     var formals: seq<FParameter> := [];
     for n := 0 to |func.parameters|
-      invariant forall p <- func.parameters[..n] :: Raw.LegalVariableName(p.name) && b3.IsType(p.typ)
+      invariant forall p <- func.parameters[..n] :: Raw.LegalVariableName(p.name) && (b3.IsType(p.typ) || p.typ in generatedTypes)
       invariant forall i, j :: 0 <= i < j < n ==> func.parameters[i].name != func.parameters[j].name
       invariant paramMap.Keys == (set p <- func.parameters[..n] :: p.name)
       invariant |formals| == n
@@ -467,10 +498,10 @@ module Resolver {
   }
 
   method ResolveFunctionDefinition(func: Raw.Function, rfunc: Function, ers: ExprResolverState) returns (r: Result<(), string>)
-    requires func.SignatureWellFormed(ers.b3) && rfunc.SignatureCorrespondence(func) && ers.Valid()
+    requires func.SignatureWellFormed(ers.b3, ers.generatedTypes) && rfunc.SignatureCorrespondence(func) && ers.Valid()
     requires rfunc.WellFormed()
     modifies rfunc`Definition
-    ensures r.Success? ==> func.WellFormed(ers.b3) && rfunc.WellFormed()
+    ensures r.Success? ==> func.WellFormed(ers.b3, ers.generatedTypes) && rfunc.WellFormed()
   {
     if func.definition == None {
       rfunc.Definition := None;
@@ -551,7 +582,7 @@ module Resolver {
     ensures r.Success? ==>
       // raw procedures had distinct names and were well-formed
       && (forall i, j :: 0 <= i < j < |ers.b3.procedures| ==> ers.b3.procedures[i].name != ers.b3.procedures[j].name)
-      && (forall proc <- ers.b3.procedures :: proc.WellFormed(ers.b3))
+      && (forall proc <- ers.b3.procedures :: proc.WellFormed(ers.b3, ers.generatedTypes))
     ensures r.Success? ==> var procMap: map<string, Procedure> := r.value;
       && procMap.Keys == (set proc <- ers.b3.procedures :: proc.name)
       && NameAlignment(procMap)
@@ -569,7 +600,7 @@ module Resolver {
       // properties of the raw procedures seen so far
       invariant forall i, j :: 0 <= i < j < n ==> b3.procedures[i].name != b3.procedures[j].name
       invariant procMap.Keys == set proc <- b3.procedures[..n] :: proc.name
-      invariant forall proc <- b3.procedures[..n] :: proc.SignatureWellFormed(b3) && procMap[proc.name].SignatureCorrespondence(proc)
+      invariant forall proc <- b3.procedures[..n] :: proc.SignatureWellFormed(b3, ers.generatedTypes) && procMap[proc.name].SignatureCorrespondence(proc)
       // properties of procMap
       invariant NameAlignment(procMap)
       invariant LinearForm(procMap, procedures)
@@ -597,8 +628,8 @@ module Resolver {
 
     var prs := ProcResolverState(ers, Some(procMap));
     for n := 0 to |b3.procedures|
-      invariant forall proc <- b3.procedures :: proc.SignatureWellFormed(b3) && procMap[proc.name].SignatureCorrespondence(proc)
-      invariant forall proc <- b3.procedures[..n] :: proc.WellFormed(b3)
+      invariant forall proc <- b3.procedures :: proc.SignatureWellFormed(b3, ers.generatedTypes) && procMap[proc.name].SignatureCorrespondence(proc)
+      invariant forall proc <- b3.procedures[..n] :: proc.WellFormed(b3, ers.generatedTypes)
       invariant forall proc <- procedures :: proc.WellFormed()
     {
       var proc := b3.procedures[n];
@@ -614,13 +645,13 @@ module Resolver {
 
   method ResolveProcedureSignature(proc: Raw.Procedure, ers: ExprResolverState) returns (r: Result<Procedure, string>)
     requires ers.Valid()
-    ensures r.Success? ==> proc.SignatureWellFormed(ers.b3)
+    ensures r.Success? ==> proc.SignatureWellFormed(ers.b3, ers.generatedTypes)
     ensures r.Success? ==> fresh(r.value) && r.value.SignatureCorrespondence(proc) && r.value.WellFormed()
   {
     var paramMap: map<string, Variable> := map[];
     var formals: seq<PParameter> := [];
     for n := 0 to |proc.parameters|
-      invariant forall p <- proc.parameters[..n] :: Raw.LegalVariableName(p.name) && ers.b3.IsType(p.typ)
+      invariant forall p <- proc.parameters[..n] :: Raw.LegalVariableName(p.name) && (ers.b3.IsType(p.typ) || p.typ in ers.generatedTypes)
       invariant forall i, j :: 0 <= i < j < n ==> proc.parameters[i].name != proc.parameters[j].name
       invariant paramMap.Keys ==
         (set p <- proc.parameters[..n] :: p.name) +
@@ -682,14 +713,14 @@ module Resolver {
   const ReturnLabelName: string := "return"
 
   method ResolveProcedureBody(proc: Raw.Procedure, rproc: Procedure, prs: ProcResolverState) returns (r: Result<(), string>)
-    requires proc.SignatureWellFormed(prs.ers.b3)
+    requires proc.SignatureWellFormed(prs.ers.b3, prs.ers.generatedTypes)
     requires rproc.SignatureCorrespondence(proc) && rproc.WellFormedHeader()
     requires prs.Valid()
     modifies rproc
     ensures r.Success? && proc.body.Some? ==>
       var postScope := proc.AllParameterNames();
-      proc.body.value.WellFormed(prs.ers.b3, postScope, {}, false)
-    ensures r.Success? ==> proc.WellFormed(prs.ers.b3) && rproc.WellFormed()
+      proc.body.value.WellFormed(prs.ers.b3, prs.ers.generatedTypes, postScope, {}, false)
+    ensures r.Success? ==> proc.WellFormed(prs.ers.b3, prs.ers.generatedTypes) && rproc.WellFormed()
   {
     if proc.body == None {
       rproc.Body := None;

@@ -77,6 +77,7 @@ module Ast {
 
   datatype Domain = Domain(self: TypeDecl, params: seq<TypeDecl>, members: Program)
 
+  // TODO: There is no reason for a resolved Program to contain domains (except possibly if a domain's procedures are to be verified exactly once).
   datatype Program = Program(domains: seq<Domain>, types: seq<TypeDecl>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
   {
     predicate WellFormed()
