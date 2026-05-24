@@ -139,11 +139,13 @@ module Parser {
   const customLiteralChar := identifierChar + "+-*/@#!^"
 
   const parseIdentifierChar: B<char> := CharTest((c: char) => c in identifierChar, "identifier character")
-  const parseIdentifierRaw: B<string> := // TODO: this should fail if the identifier is a keyword
+  const parseIdentifierRaw: B<string> :=
     CharTest((c: char) => c in canStartIdentifierChar, "identifier start character").Then(
       (c: char) =>
         parseIdentifierChar.Rep().M((s: string) => [c] + s))
-  const parseId: B<string> := parseIdentifierRaw.I_e(W)
+  // "parseId" parses the name of a user-defined symbol; "parseIdUse" parses the use of a (user-defined, built-in, or generated) symbol
+  const parseId: B<string> := parseIdentifierRaw.I_e(W) // TODO: this should fail if the identifier is a keyword or if it contains ".."
+  const parseIdUse: B<string> := parseIdentifierRaw.I_e(W)
 
   const parseCustomLiteralChar: B<char> := CharTest((c: char) => c in customLiteralChar, "custom literal character")
   const parseCustomLiteral: B<string> := parseCustomLiteralChar.Then((c: char) => parseCustomLiteralChar.Rep().M((s: string) => [c] + s))
@@ -249,7 +251,7 @@ module Parser {
     T("function").e_I(parseId).Then(name =>
       parseParenthesized(parseCommaDelimitedSeq(parseFunctionFormal)).Then(formals =>
         Sym(":").e_I(parseType).Then(resultType =>
-          T("tag").e_I(parseId).Option().Then(maybeTag =>
+          T("tag").e_I(parseIdUse).Option().Then(maybeTag =>
             parseFunctionDefinition.Option().M(maybeDefinition =>
               Function(name, formals, resultType, maybeTag, maybeDefinition)
     )))))
@@ -267,7 +269,7 @@ module Parser {
 
   const parseAxiomDecl: B<Axiom> :=
     T("axiom")
-    .e_I(T("explains").e_I(parseNonemptyCommaDelimitedSeq(parseId)).Option())
+    .e_I(T("explains").e_I(parseNonemptyCommaDelimitedSeq(parseIdUse)).Option())
     .I_I(parseExpr).M2(MId, (explains, expr) => Axiom(if explains == None then [] else explains.value, expr))
 
   const parseProcDecl: B<Procedure> :=
@@ -315,7 +317,7 @@ module Parser {
       T("bool"),
       T("int"),
       T("tag"),
-      parseId
+      parseIdUse
     ])
 
   // ----- Parsing gallery
@@ -354,7 +356,7 @@ module Parser {
     Or([
          T("var").e_I(parseVariableDeclaration(true, c)),
          T("val").e_I(parseVariableDeclaration(false, c)),
-         T("reinit").e_I(parseNonemptyCommaDelimitedSeq(parseId)).M(ids => Reinit(ids)),
+         T("reinit").e_I(parseNonemptyCommaDelimitedSeq(parseIdUse)).M(ids => Reinit(ids)),
          T("exit").e_I(parseOptionalExitArgument()).M(optionalLabel => Exit(optionalLabel)),
          T("return").M(_ => Return),
          T("check").e_I(parseExpr).M(e => Check(e)),
@@ -367,9 +369,9 @@ module Parser {
          T("choose").e_I(c("block")).I_I(T("or").e_I(c("block")).Rep()).M2(MId, (s, ss) => Choose([s] + ss)),
          T("if").e_I(parseIfCont(c)),
          c("loop"),
-         Atomic(parseId.I_e(Sym(":="))).I_I(parseExpr).M2(MId, (lhs, rhs) => Assign(lhs, rhs)),
+         Atomic(parseIdUse.I_e(Sym(":="))).I_I(parseExpr).M2(MId, (lhs, rhs) => Assign(lhs, rhs)),
          Atomic(parseId.I_e(Sym(":"))).I_I(Or([c("block"), c("loop")])).M2(MId, (lbl, stmt) => LabeledStmt(lbl, stmt)),
-         Atomic(parseId.I_e(Sym("("))).I_I(parseCommaDelimitedSeq(parseCallArgument)).I_e(Sym(")")).M2(MId, (name, args) => Call(name, args))
+         Atomic(parseIdUse.I_e(Sym("("))).I_I(parseCommaDelimitedSeq(parseCallArgument)).I_e(Sym(")")).M2(MId, (name, args) => Call(name, args))
        ])
   }
 
@@ -386,8 +388,8 @@ module Parser {
     T("autoinv").e_I(parseExpr).Option()
 
   function parseOptionalExitArgument(): B<Option<string>> {
-    Lookahead(parseId.I_e(Or([Sym(":="), Sym(":"), Sym("(")]))).Then((maybe: Option<string>) =>
-                                                                       if maybe.Some? then Nothing.M(_ => None) else parseId.Option()
+    Lookahead(parseIdUse.I_e(Or([Sym(":="), Sym(":"), Sym("(")]))).Then((maybe: Option<string>) =>
+      if maybe.Some? then Nothing.M(_ => None) else parseIdUse.Option()
     )
   }
 
@@ -419,8 +421,8 @@ module Parser {
 
   const parseCallArgument: B<CallArgument> :=
     Or([
-         T("out").e_I(parseId).M(name => CallArgument(ParameterMode.Out, IdExpr(name))),
-         T("inout").e_I(parseId).M(name => CallArgument(ParameterMode.InOut, IdExpr(name))),
+         T("out").e_I(parseIdUse).M(name => CallArgument(ParameterMode.Out, IdExpr(name))),
+         T("inout").e_I(parseIdUse).M(name => CallArgument(ParameterMode.InOut, IdExpr(name))),
          parseExpr.M(e => CallArgument(ParameterMode.In, e))
        ])
 
@@ -613,8 +615,8 @@ module Parser {
       T("true").M(_ => BLiteral(true)),
       Nat.I_e(W).M(n => ILiteral(n)),
       Sym("|").e_I(parseCustomLiteral).I_e(Sym(":")).I_I(parseType).I_e(Sym("|")).M2(MId, (lit, typ) => CustomLiteral(lit, typ)),
-      T("old").e_I(parseId).M(name => IdExpr(name, true)),
-      parseId.Then(name =>
+      T("old").e_I(parseIdUse).M(name => IdExpr(name, true)),
+      parseIdUse.Then(name =>
         Or([
           Sym("(").e_I(parseCommaDelimitedSeq(c("expr"))).I_e(Sym(")"))
             .M(args => FunctionCallExpr(name, args)),
