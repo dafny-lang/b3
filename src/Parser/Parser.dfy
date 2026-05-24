@@ -20,7 +20,7 @@ module Parser {
     W.e_I(RepTill(parseTopLevelDecl.I_e(W), EOS)).M(
       decls =>
         var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls);
-        Program(dd, tt, gg, ff, aa, pp))
+        Program({}, dd, tt, gg, ff, aa, pp))
 
   // ----- Parser helpers
 
@@ -226,7 +226,7 @@ module Parser {
           case Some(ids) => ids;
         Sym("{").e_I(c("decl").Rep()).I_e(Sym("}")).M(members =>
           var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(members);
-          var domainBody := Program(dd, tt, gg, ff, aa, pp);
+          var domainBody := Program({name} + (set parameterTypeName <- parameters), dd, tt, gg, ff, aa, pp);
           Domain(name, parameters, domainBody)
         )
     ))

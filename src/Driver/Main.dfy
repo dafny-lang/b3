@@ -124,17 +124,22 @@ module B3 {
     Verifier.Verify(b3, cli.options);
   }
 
-  method ReadAndParseProgram(filename: string) returns (r: Result<RawAst.Program, string>) {
+  method ReadAndParseProgram(filename: string) returns (r: Result<RawAst.Program, string>)
+    ensures r.Success? ==> r.value.signatureTypes == {}
+  {
     var input :- FileIO.ReadUTF8FromFile(filename);
     var parseResult := SB.Apply(Parser.TopLevel, input);
     var b3 :- match parseResult {
       case ParseSuccess(value, remaining) => Success(value)
       case ParseFailure(_, _) => Failure(SB.FailureToString(input, parseResult))
     };
-   return Success(b3);
+    // The following condition is established by the parser:
+    expect b3.signatureTypes == {}, "internal error: incorrectly formed top-level Program.signatureTypes";
+    return Success(b3);
   }
 
   method ReadAndParseFromStdin() returns (r: Result<RawAst.Program, string>)
+    ensures r.Success? ==> r.value.signatureTypes == {}
     decreases *
   {
     var input :- StdinReader.ReadStdin();
@@ -143,10 +148,13 @@ module B3 {
       case ParseSuccess(value, remaining) => Success(value)
       case ParseFailure(_, _) => Failure(SB.FailureToString(input, parseResult))
     };
+    // The following condition is established by the parser:
+    expect b3.signatureTypes == {}, "internal error: incorrectly formed top-level Program.signatureTypes";
     return Success(b3);
   }
 
   method ResolveAndTypeCheck(rawb3: RawAst.Program, cli: CLI.CliResult) returns (r: Result<Ast.Program, string>)
+    requires rawb3.signatureTypes == {}
     ensures r.Success? ==> var b3 := r.value;
       b3.WellFormed() && TypeChecker.TypeCorrect(b3) && StaticConsistency.Consistent(b3)
   {

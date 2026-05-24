@@ -15,18 +15,22 @@ module Resolver {
   import opened StmtResolver
   import opened ExprResolver
 
+  ghost predicate GoodTypeMap(b3: Raw.Program, typeMap: map<string, TypeDecl>) {
+    forall typename :: b3.IsType(typename) <==> typename in BuiltInTypes || typename in typeMap
+  }
+
   method Resolve(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<Ast.Program, string>)
     requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
+    requires b3.signatureTypes == set param <- typeParameters :: param.Name
     ensures r.Success? ==> b3.WellFormed() && r.value.WellFormed()
     decreases b3
   {
-    assume {:axiom} typeParameters == []; // TODO
-
     var domainMap, domains :- ResolveAllDomains(b3);
 
     var typeMap, types :- ResolveAllTypes(b3, typeParameters);
+    ghost var typeParameterNames := set param <- typeParameters :: param.Name;
 
-    var _ :- ResolveDomainInstantiations(b3, domainMap, typeMap);
+    var resolvedInstantiations :- ResolveDomainInstantiations(b3, domainMap, typeMap);
 
     var taggerMap, taggerFunctions :- ResolveAllTaggers(b3, typeMap);
     ConsequencesOfTagResolution(taggerMap, taggerFunctions);
@@ -70,15 +74,19 @@ module Resolver {
       var domain := b3.domains[n];
 
       var name := domain.name;
+      // The following condition is established by the parser:
+      expect domain.members.signatureTypes == {name} + (set parameterTypeName <- domain.params), "internal error: incorrectly formed Domain value";
       if name in domainMap {
         return Failure("duplicate domain name: " + name), domains;
       }
       var self := new TypeDecl(name, true);
-      ghost var typesForUseInDomainBody := [self];
+      var typesForUseInDomainBody: seq<TypeDecl> := [self];
 
       var params := [];
       for i := 0 to |domain.params|
+        invariant |typesForUseInDomainBody| == 1 + i
         invariant typesForUseInDomainBody == [self] + params
+        invariant forall j :: 0 <= j < 1 + i ==> typesForUseInDomainBody[j].Name == if j == 0 then name else domain.params[j - 1]
         invariant forall i, j :: 0 <= i < j < |typesForUseInDomainBody| ==> typesForUseInDomainBody[i].Name != typesForUseInDomainBody[j].Name
       {
         var typeParamName := domain.params[i];
@@ -92,7 +100,18 @@ module Resolver {
         typesForUseInDomainBody := typesForUseInDomainBody + [typeParam];
       }
 
-      var resolvedMembers :- Resolve(domain.members, [self] + params);
+      assert domain.members.signatureTypes == set param: TypeDecl <- typesForUseInDomainBody :: param.Name by {
+        var names := seq(|typesForUseInDomainBody|, i requires 0 <= i < |typesForUseInDomainBody| => typesForUseInDomainBody[i].Name);
+        calc {
+          domain.members.signatureTypes;
+          // by "expect" above
+          ({name} + set parameterTypeName <- domain.params);
+          set parameterTypeName <- [name] + domain.params;
+          { assert [name] + domain.params == names; }
+          set parameterTypeName <- names;
+        }
+      }
+      var resolvedMembers :- Resolve(domain.members, typesForUseInDomainBody);
 
       var decl := Domain(self, params, resolvedMembers);
       domainMap := domainMap[name := decl];
@@ -104,10 +123,11 @@ module Resolver {
   method ResolveAllTypes(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<map<string, TypeDecl>, string>, types: seq<TypeDecl>)
     requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
     ensures r.Success? ==> var typeMap := r.value;
+      var typeParameterNames := set param <- typeParameters :: param.Name;
       // raw types were well-formed
-      && typeMap.Keys == (set param <- typeParameters :: param.Name) + (set typeDecl: Raw.TypeDecl <- b3.types :: typeDecl.name)
+      && typeMap.Keys == typeParameterNames + (set typeDecl: Raw.TypeDecl <- b3.types :: typeDecl.name)
       && NameAlignment(typeMap)
-      && (forall typeDecl <- b3.types :: typeDecl.name !in BuiltInTypes)
+      && (forall typeDecl <- b3.types :: typeDecl.name !in BuiltInTypes && typeDecl.name !in typeParameterNames)
       && (forall i, j :: 0 <= i < j < |b3.types| ==> b3.types[i] != b3.types[j])
       // resolved type declarations have distinct names
       && (forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name)
@@ -145,7 +165,7 @@ module Resolver {
       // typeMap organizes type-declaration objects correctly according to their names
       invariant NameAlignment(typeMap)
       // no user-defined type seen so far uses the name of a built-in type
-      invariant forall typeDecl <- b3.types[..n] :: typeDecl.name !in BuiltInTypes
+      invariant forall typeDecl <- b3.types[..n] :: typeDecl.name !in BuiltInTypes && typeDecl.name !in typeParameterNames
       // user-defined types seen so far have distinct names
       invariant forall i, j :: 0 <= i < j < n ==> b3.types[i] != b3.types[j]
       // resolved type declarations have distinct names
@@ -168,8 +188,15 @@ module Resolver {
     return Success(typeMap), types;
   }
 
-  method ResolveDomainInstantiations(b3: Raw.Program, domainMap: map<string, Domain>, typeMap: map<string, TypeDecl>) returns (r: Result<(), string>)
+  datatype ResolvedInstantiation = ResolvedInstantiation(domain: Domain, typeArguments: seq<Type>) {
+    predicate WellFormed() {
+      && |domain.params| == |typeArguments|
+    }
+  }
+
+  method ResolveDomainInstantiations(b3: Raw.Program, domainMap: map<string, Domain>, typeMap: map<string, TypeDecl>) returns (r: Result<seq<ResolvedInstantiation>, string>)
   {
+    var resolvedInstantiations := [];
     for n := 0 to |b3.types|
     {
       match b3.types[n].domainInstantiation
@@ -185,17 +212,20 @@ module Resolver {
           var expected := Int2String(|domain.params|);
           return Failure("domain instantiation has wrong number of type arguments: " + domainName + " (got " + got + ", expected " + expected + ")");
         }
+        var resolvedTypeArguments := [];
         for j := 0 to |instantiation.typeArguments|
         {
           var resolvedType :- ResolveType(instantiation.typeArguments[j], typeMap);
+          resolvedTypeArguments := resolvedTypeArguments + [resolvedType];
         }
+        resolvedInstantiations := resolvedInstantiations + [ResolvedInstantiation(domain, resolvedTypeArguments)];
     }
 
-    return Success(());
+    return Success(resolvedInstantiations);
   }
 
   method ResolveAllTaggers(b3: Raw.Program, typeMap: map<string, TypeDecl>) returns (r: Result<map<string, Function>, string>, taggerFunctions: seq<Function>)
-    requires forall typename :: b3.IsType(typename) <==> typename in BuiltInTypes || typename in typeMap
+    requires GoodTypeMap(b3, typeMap)
     ensures r.Success? ==>
       // raw taggers were well-formed
       && (forall i, j :: 0 <= i < j < |b3.taggers| ==> b3.taggers[i].name != b3.taggers[j].name)
@@ -269,7 +299,7 @@ module Resolver {
 
   method ResolveAllFunctions(b3: Raw.Program, typeMap: map<string, TypeDecl>, taggerMap: map<string, Function>)
       returns (r: Result<map<string, Function>, string>, functions: seq<Function>, axioms: seq<Axiom>)
-    requires forall typename :: b3.IsType(typename) <==> typename in BuiltInTypes || typename in typeMap
+    requires GoodTypeMap(b3, typeMap)
     requires NameAlignment(taggerMap)
     requires forall taggerName <- taggerMap :: taggerMap[taggerName].WellFormedAsTagger()
     ensures r.Success? ==>
@@ -346,7 +376,7 @@ module Resolver {
     var ers := ExprResolverState(b3, typeMap, taggerMap + functionMap);
     for n := 0 to |b3.functions|
       invariant forall func <- b3.functions :: func.SignatureWellFormed(b3) && functionMap[func.name].SignatureCorrespondence(func)
-      invariant forall func <- b3.functions[..n] :: func.WellFormed(b3)
+      invariant forall func <- b3.functions[..n] :: func.WellFormed(b3) && functionMap[func.name].WellFormed()
       invariant forall func <- functions :: func.WellFormed()
     {
       var func := b3.functions[n];
@@ -385,7 +415,7 @@ module Resolver {
   }
 
   method ResolveFunctionSignature(func: Raw.Function, b3: Raw.Program, typeMap: map<string, TypeDecl>, taggerMap: map<string, Function>) returns (r: Result<Function, string>)
-    requires forall typename :: b3.IsType(typename) <==> typename in BuiltInTypes || typename in typeMap
+    requires GoodTypeMap(b3, typeMap)
     requires forall taggerName <- taggerMap :: taggerMap[taggerName].Name == taggerName && taggerMap[taggerName].WellFormedAsTagger()
     ensures r.Success? ==> func.SignatureWellFormed(b3)
     ensures r.Success? ==> fresh(r.value) && r.value.SignatureCorrespondence(func) && r.value.WellFormed()

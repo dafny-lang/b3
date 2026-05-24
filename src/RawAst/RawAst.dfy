@@ -6,8 +6,9 @@ module RawAst {
 
   // Top-level program
 
-  // A raw program reflects program that has been parsed.
+  // A raw program reflects a program that has been parsed.
   datatype Program = Program(
+    signatureTypes: set<string>,
     domains: seq<Domain>,
     types: seq<TypeDecl>,
     taggers: seq<Tagger>,
@@ -45,7 +46,7 @@ module RawAst {
     }
 
     predicate IsType(typ: TypeName) {
-      typ in BuiltInTypes || exists t <- types :: typ == t.name
+      typ in BuiltInTypes || typ in signatureTypes || exists t <- types :: typ == t.name
     }
   }
 
@@ -54,7 +55,8 @@ module RawAst {
   datatype Domain = Domain(name: string, params: seq<string>, members: Program)
   {
     predicate WellFormed(b3: Program) {
-      members.WellFormed()
+      && members.signatureTypes == {name} + (set parameterTypeName <- params)
+      && members.WellFormed()
     }
   }
 
