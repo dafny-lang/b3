@@ -2,23 +2,14 @@
 
 domain Domain
 {
-  // type Domain
 }
 
 domain DS(X)
 {
-  // type DS
-
-  // type X
 }
 
 domain DT(X, Y)
 {
-  // type DT
-
-  // type X
-
-  // type Y
 }
 
 type MyDomain
@@ -34,3 +25,21 @@ type DT0
 type DT1
 
 type DT2
+
+type DSInt..X
+
+type DSBool..X
+
+type DSMyDomain..X
+
+type DT0..X
+
+type DT0..Y
+
+type DT1..X
+
+type DT1..Y
+
+type DT2..X
+
+type DT2..Y

@@ -9,10 +9,9 @@ module Ast {
 
   export
     reveals NamedDecl, NamedDecl.Distinct, TypeDecl, Type
-    provides TypeDecl.FromDomainSignature
     provides NamedDecl.Name, Type.ToString
     reveals Program, Type, Variable, Procedure, Label, PParameter, LocalVariable
-    reveals Domain
+    reveals Domain, Domain.WellFormed
     reveals Expr, Operator, ParameterMode, AExpr, Location, Stmt, CallArgument
     reveals AutoInvVariable
     reveals Program.WellFormed, Procedure.WellFormed, PParameter.WellFormed, AExpr.WellFormed, Stmt.WellFormed, Expr.WellFormed, CallArgument.WellFormed
@@ -50,13 +49,10 @@ module Ast {
   }
 
   class TypeDecl extends NamedDecl {
-    const FromDomainSignature: bool
-  
-    constructor (name: string, fromDomainSignature: bool)
+    constructor (name: string)
       ensures Name == name
     {
       Name := name;
-      FromDomainSignature := fromDomainSignature;
     }
   }
 
@@ -75,7 +71,15 @@ module Ast {
     }
   }
 
+  // In a resolved Domain, "self" is a TypeDecl, because it is used as a type inside "members",
+  // as are the type parameters "params". When a domain is instantiated, the "self" type is replaced with a UserType
+  // corresponding to the LHS of the domain-instantiation declaration.
   datatype Domain = Domain(self: TypeDecl, params: seq<TypeDecl>, members: Program)
+  {
+    ghost predicate WellFormed() {
+      NamedDecl.Distinct([self] + params + members.types)
+    }
+  }
 
   // TODO: There is no reason for a resolved Program to contain domains (except possibly if a domain's procedures are to be verified exactly once).
   datatype Program = Program(domains: seq<Domain>, types: seq<TypeDecl>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)

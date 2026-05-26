@@ -12,23 +12,35 @@ module Resolver {
   import FunctionDesugaring
   import opened NamesAndLinearForms
   import opened TypeResolver
+  import opened DomainResolver
   import opened StmtResolver
   import opened ExprResolver
+  import DomainInstantiation
 
   ghost predicate GoodTypeMap(b3: Raw.Program, typeMap: map<string, TypeDecl>, generatedTypes: set<string> := {}) {
     forall typename :: b3.IsType(typename) || typename in generatedTypes <==> typename in BuiltInTypes || typename in typeMap
   }
 
   method Resolve(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<Ast.Program, string>, ghost generatedTypes: set<string>)
-    requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
+    requires forall param <- typeParameters :: Raw.LegalVariableName(param.Name)
+    requires NamedDecl.Distinct(typeParameters)
     requires b3.signatureTypes == set param <- typeParameters :: param.Name
-    ensures r.Success? ==> b3.WellFormed(generatedTypes) && r.value.WellFormed()
+    ensures r.Success? ==> b3.WellFormed(generatedTypes) && r.value.WellFormed() && NamedDecl.Distinct(typeParameters + r.value.types)
     decreases b3
   {
     generatedTypes := {};
     var domainMap, domains :- ResolveAllDomains(b3);
 
     var typeMap, types :- ResolveAllTypes(b3, typeParameters);
+    assert NamedDecl.Distinct(typeParameters + types);
+    forall typ <- b3.types
+      ensures Raw.LegalVariableName(typ.name)
+    {
+      assert typ.name in typeMap;
+      assert typeMap[typ.name] in types by {
+        LinearFormL2R(typ.name, typeMap, typeParameters + types);
+      }
+    }
     ghost var typeParameterNames := set param <- typeParameters :: param.Name;
 
     // Note, by resolving all domain-instantiation RHSs before actually instantiating the domains, we avoid the possibility
@@ -36,7 +48,7 @@ module Resolver {
     // we avoid ordering dependencies among domains. With more advanced uses of domains, it would be good to extend the
     // language to allow some such dependencies.
     var resolvedInstantiations :- ResolveDomainInstantiations(b3, domainMap, typeMap);
-    var instTypes, instFunctions, instAxioms, instProcedures := InstantiateDomains(b3, resolvedInstantiations);
+    var instTypes, instFunctions, instAxioms, instProcedures := InstantiateDomains(resolvedInstantiations);
     typeMap, generatedTypes := AddGeneratedTypes(b3, typeMap, instTypes);
 
     var taggerMap, taggerFunctions :- ResolveAllTaggers(b3, typeMap, generatedTypes);
@@ -59,13 +71,31 @@ module Resolver {
 
     var procMap, procedures :- ResolveAllProcedures(ers);
 
-    var r3 := Program(domains, types, taggerFunctions + functions, generatedAxioms + axioms, procedures);
+    var r3 := Program(domains, types + instTypes, taggerFunctions + functions, generatedAxioms + axioms, procedures);
+    assert NamedDecl.Distinct(typeParameters + (types + instTypes)) by {
+      assert typeParameters + (types + instTypes) == (typeParameters + types) + instTypes;
+      assert NamedDecl.Distinct(typeParameters + types);
+      assert NamedDecl.Distinct(instTypes);
+      forall typ: TypeDecl <- typeParameters + types
+        ensures !Raw.HasDoubleDot(typ.Name)
+      {
+        assert Raw.LegalVariableName(typ.Name);
+        reveal Raw.LegalVariableName;
+      }
+      assert forall typ <- instTypes :: Raw.HasDoubleDot(typ.Name);
+    }
+    assert NamedDecl.Distinct(types + instTypes) by {
+      assert forall i :: 0 <= i < |types + instTypes| ==> (types + instTypes)[i] == (typeParameters + (types + instTypes))[|typeParameters| + i];
+    }
     DistinctConcat(taggerMap, taggerFunctions, functionMap, functions);
 
     return Success(r3), generatedTypes;
   }
 
   method ResolveAllDomains(b3: Raw.Program) returns (r: Result<map<string, Domain>, string>, domains: seq<Domain>)
+    ensures r.Success? ==> var domainMap := r.value;
+      && LinearForm(domainMap, domains)
+      && forall domainName <- domainMap :: domainMap[domainName].WellFormed()
     decreases b3, 0
   {
     var domainMap: map<string, Domain> := map[];
@@ -77,32 +107,41 @@ module Resolver {
       invariant forall name <- domainMap :: domainMap[name].self.Name == name
       // domains seen so far have distinct names
       invariant forall i, j :: 0 <= i < j < n ==> b3.domains[i] != b3.domains[j]
+      // connection between domainMap and domains
+      invariant LinearForm(domainMap, domains)
+      // domains are well-formed
+      invariant forall domainName <- domainMap :: domainMap[domainName].WellFormed()
     {
       var domain := b3.domains[n];
 
       var name := domain.name;
       // The following condition is established by the parser:
       expect domain.members.signatureTypes == {name} + (set parameterTypeName <- domain.params), "internal error: incorrectly formed Domain value";
-      if name in domainMap {
+      if !Raw.LegalVariableName(name) {
+        return Failure("domain name is not a legal name: '" + name + "'"), domains;
+      } else if name in domainMap {
         return Failure("duplicate domain name: " + name), domains;
       }
-      var self := new TypeDecl(name, true);
+      var self := new TypeDecl(name);
       var typesForUseInDomainBody: seq<TypeDecl> := [self];
 
       var params := [];
       for i := 0 to |domain.params|
         invariant |typesForUseInDomainBody| == 1 + i
         invariant typesForUseInDomainBody == [self] + params
+        invariant forall typ <- typesForUseInDomainBody :: Raw.LegalVariableName(typ.Name)
         invariant forall j :: 0 <= j < 1 + i ==> typesForUseInDomainBody[j].Name == if j == 0 then name else domain.params[j - 1]
         invariant forall i, j :: 0 <= i < j < |typesForUseInDomainBody| ==> typesForUseInDomainBody[i].Name != typesForUseInDomainBody[j].Name
       {
         var typeParamName := domain.params[i];
-        if name == typeParamName {
+        if !Raw.LegalVariableName(typeParamName) {
+          return Failure("domain type parameter is not a legal name: '" + typeParamName + "'"), domains;
+        } else if name == typeParamName {
           return Failure("domain type parameter is not allowed to have the same name of the domain itself: '" + typeParamName + "'"), domains;
         } else if exists priorTypeParam: TypeDecl <- params :: priorTypeParam.Name == typeParamName {
           return Failure("duplicate domain type parameter name: '" + typeParamName + "'"), domains;
         }
-        var typeParam := new TypeDecl(typeParamName, true);
+        var typeParam := new TypeDecl(typeParamName);
         params := params + [typeParam];
         typesForUseInDomainBody := typesForUseInDomainBody + [typeParam];
       }
@@ -119,8 +158,11 @@ module Resolver {
         }
       }
       var resolvedMembers, _ :- Resolve(domain.members, typesForUseInDomainBody);
+      assert NamedDecl.Distinct(typesForUseInDomainBody + resolvedMembers.types);
 
       var decl := Domain(self, params, resolvedMembers);
+      assert decl.WellFormed();
+      NewNamePreservesLinearForm(name, decl, domainMap, domains);
       domainMap := domainMap[name := decl];
       domains := domains + [decl];
     }
@@ -128,40 +170,47 @@ module Resolver {
   }
 
   method ResolveAllTypes(b3: Raw.Program, typeParameters: seq<TypeDecl>) returns (r: Result<map<string, TypeDecl>, string>, types: seq<TypeDecl>)
-    requires forall i, j :: 0 <= i < j < |typeParameters| ==> typeParameters[i].Name != typeParameters[j].Name
+    requires forall param <- typeParameters :: Raw.LegalVariableName(param.Name)
+    requires NamedDecl.Distinct(typeParameters)
     ensures r.Success? ==> var typeMap := r.value;
       var typeParameterNames := set param <- typeParameters :: param.Name;
       // raw types were well-formed
       && typeMap.Keys == typeParameterNames + (set typeDecl: Raw.TypeDecl <- b3.types :: typeDecl.name)
       && NameAlignment(typeMap)
       && (forall typeDecl <- b3.types :: typeDecl.name !in BuiltInTypes && typeDecl.name !in typeParameterNames)
-      && (forall i, j :: 0 <= i < j < |b3.types| ==> b3.types[i] != b3.types[j])
-      // resolved type declarations have distinct names
-      && (forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name)
+      && (forall i, j :: 0 <= i < j < |b3.types| ==> b3.types[i].name != b3.types[j].name)
+      // resolved type declarations have legal, distinct names
+      && NamedDecl.Distinct(typeParameters + types)
+      && (forall typ <- types :: Raw.LegalVariableName(typ.Name))
       // typeMap.Keys/types correspondence
-      && LinearForm(r.value, types)
+      && LinearForm(r.value, typeParameters + types)
   {
     var typeMap: map<string, TypeDecl> := map[];
     types := [];
 
-    // Add the type parameters as type declarations
+    // Add the type parameters to the typeMap
     for n := 0 to |typeParameters|
       invariant typeMap.Keys == set param: TypeDecl <- typeParameters[..n] :: param.Name
       invariant NameAlignment(typeMap)
-      invariant forall i, j :: 0 <= i < j < n ==> typeParameters[i].Name != typeParameters[j].Name
-      invariant forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name
-      invariant LinearForm(typeMap, types)
+      invariant NamedDecl.Distinct(typeParameters[..n])
+      invariant forall typ: TypeDecl <- typeParameters[..n] :: Raw.LegalVariableName(typ.Name)
+      invariant LinearForm(typeMap, typeParameters[..n])
     {
       var param := typeParameters[n];
       var name := param.Name;
       assert name !in typeMap;
-      if name in BuiltInTypes {
+      if !Raw.LegalVariableName(name) {
+        return Result<map<string, TypeDecl>, string>.Failure("type parameter is not a legal name: " + name), types;
+      } else if name in BuiltInTypes {
         return Result<map<string, TypeDecl>, string>.Failure("type parameter is not allowed to have the name of a built-in type: " + name), types;
       }
-      NewNamePreservesLinearForm(name, param, typeMap, types);
+      if name in BuiltInTypes {
+           return Result<map<string, TypeDecl>, string>.Failure("type parameter is not allowed to have the name of a built-in type: " + name), types;
+      }
+      NewNamePreservesLinearFormAndIsUnique(name, param, typeMap, typeParameters[..n]);
       typeMap := typeMap[name := param];
-      types := types + [param];
     }
+    assert typeParameters == typeParameters[..|typeParameters|];
     ghost var typeParameterNames := set param <- typeParameters :: param.Name;
     assert typeMap.Keys == typeParameterNames;
 
@@ -174,71 +223,29 @@ module Resolver {
       // no user-defined type seen so far uses the name of a built-in type
       invariant forall typeDecl <- b3.types[..n] :: typeDecl.name !in BuiltInTypes && typeDecl.name !in typeParameterNames
       // user-defined types seen so far have distinct names
-      invariant forall i, j :: 0 <= i < j < n ==> b3.types[i] != b3.types[j]
-      // resolved type declarations have distinct names
-      invariant forall i, j :: 0 <= i < j < |types| ==> types[i].Name != types[j].Name
+      invariant forall i, j :: 0 <= i < j < n ==> b3.types[i].name != b3.types[j].name
+      // resolved type declarations have distinct names and do not contain a double dot
+      invariant NamedDecl.Distinct(typeParameters + types)
+      invariant forall typ <- types :: Raw.LegalVariableName(typ.Name)
       // typeMap.Keys/types correspondence
-      invariant LinearForm(typeMap, types)
+      invariant LinearForm(typeMap, typeParameters + types)
     {
       var name := b3.types[n].name;
-      if name in BuiltInTypes {
+      if !Raw.LegalVariableName(name) {
+        return Result<map<string, TypeDecl>, string>.Failure("user-defined type is not a legal name: " + name), types;
+      } else if name in BuiltInTypes {
         return Result<map<string, TypeDecl>, string>.Failure("user-defined type is not allowed to have the name of a built-in type: " + name), types;
       } else if name in typeMap {
         return Failure("duplicate type name: " + name), types;
       }
-      var decl := new TypeDecl(name, false);
-      NewNamePreservesLinearForm(name, decl, typeMap, types);
+      var decl := new TypeDecl(name);
+      assert (typeParameters + types) + [decl] == typeParameters + (types + [decl]);
+      NewNamePreservesLinearFormAndIsUnique(name, decl, typeMap, typeParameters + types);
       typeMap := typeMap[name := decl];
       types := types + [decl];
     }
 
     return Success(typeMap), types;
-  }
-
-  datatype ResolvedInstantiation = ResolvedInstantiation(domain: Domain, typeArguments: seq<Type>) {
-    predicate WellFormed() {
-      && |domain.params| == |typeArguments|
-    }
-  }
-
-  method ResolveDomainInstantiations(b3: Raw.Program, domainMap: map<string, Domain>, typeMap: map<string, TypeDecl>) returns (r: Result<seq<ResolvedInstantiation>, string>)
-  {
-    var resolvedInstantiations := [];
-    for n := 0 to |b3.types|
-    {
-      match b3.types[n].domainInstantiation
-      case None =>
-      case Some(instantiation) =>        
-        var domainName := instantiation.name;
-        if domainName !in domainMap {
-          return Failure("unknown domain: " + domainName);
-        }
-        var domain := domainMap[domainName];
-        if |domain.params| != |instantiation.typeArguments| {
-          var got := Int2String(|instantiation.typeArguments|);
-          var expected := Int2String(|domain.params|);
-          return Failure("domain instantiation has wrong number of type arguments: " + domainName + " (got " + got + ", expected " + expected + ")");
-        }
-        var resolvedTypeArguments := [];
-        for j := 0 to |instantiation.typeArguments|
-        {
-          var resolvedType :- ResolveType(instantiation.typeArguments[j], typeMap);
-          resolvedTypeArguments := resolvedTypeArguments + [resolvedType];
-        }
-        resolvedInstantiations := resolvedInstantiations + [ResolvedInstantiation(domain, resolvedTypeArguments)];
-    }
-
-    return Success(resolvedInstantiations);
-  }
-
-  method InstantiateDomains(b3: Raw.Program, resolvedInstantiations: seq<ResolvedInstantiation>) returns (instTypes: seq<TypeDecl>, instFunctions: seq<Function>, instAxioms: seq<Axiom>, instProcedures: seq<Procedure>)
-  {
-    instTypes, instFunctions, instAxioms, instProcedures := [], [], [], [];
-    for i := 0 to |resolvedInstantiations|
-    {
-      var instantiation := resolvedInstantiations[i];
-      // TODO
-    }
   }
 
   method AddGeneratedTypes(ghost b3: Raw.Program, typeMap: map<string, TypeDecl>, instTypes: seq<TypeDecl>) returns (newTypeMap: map<string, TypeDecl>, generatedTypes: set<string>)
@@ -300,7 +307,7 @@ module Resolver {
       assert Raw.LegalVariableName("subject");
       assert parameter.WellFormed();
       var rTagger := new Function(name, [parameter], TagType, None);
-      NewNamePreservesLinearForm(name, rTagger, taggerMap, taggerFunctions);
+      NewNamePreservesLinearFormAndIsUnique(name, rTagger, taggerMap, taggerFunctions);
       taggerMap := taggerMap[name := rTagger];
       assert forall tagger <- taggerFunctions :: tagger.WellFormedAsTagger();
       assert rTagger.WellFormedAsTagger() by {
@@ -376,7 +383,7 @@ module Resolver {
       var name := func.name;
       var _ :- CheckNameDuplication(name, taggerMap, functionMap, "");
       var rFunc :- ResolveFunctionSignature(func, b3, typeMap, generatedTypes, taggerMap);
-      NewNamePreservesLinearForm(name, rFunc, functionMap, functions);
+      NewNamePreservesLinearFormAndIsUnique(name, rFunc, functionMap, functions);
       functionMap := functionMap[name := rFunc];
       functions := functions + [rFunc];
 
@@ -397,7 +404,7 @@ module Resolver {
         var generatedFunc := generatedFunctions[i];
         var name := generatedFunc.Name;
         var _ :- CheckNameDuplication(name, taggerMap, functionMap, "generated ");
-        NewNamePreservesLinearForm(name, generatedFunc, functionMap, functions);
+        NewNamePreservesLinearFormAndIsUnique(name, generatedFunc, functionMap, functions);
         functionMap := functionMap[name := generatedFunc];
         functions := functions + [generatedFunc];
       }
@@ -621,7 +628,7 @@ module Resolver {
         return Failure("duplicate procedure name: " + name), procedures;
       }
       var rProc :- ResolveProcedureSignature(proc, ers);
-      NewNamePreservesLinearForm(name, rProc, procMap, procedures);
+      NewNamePreservesLinearFormAndIsUnique(name, rProc, procMap, procedures);
       procMap := procMap[name := rProc];
       procedures := procedures + [rProc];
     }
@@ -665,17 +672,23 @@ module Resolver {
       var p := proc.parameters[n];
       if !Raw.LegalVariableName(p.name) {
         return Failure("illegal parameter name: " + p.name);
-      }
-      if p.name in paramMap {
+      } else if p.name in paramMap {
         return Failure("duplicate parameter name: " + p.name);
       }
       var typ :- ResolveType(p.typ, ers.typeMap);
 
       var oldInOut;
       if p.mode == Raw.InOut {
-        var v := new LocalVariable(Raw.OldName(p.name), false, typ);
+        var oldName := Raw.OldName(p.name);
+        forall pp <- proc.parameters[..n]
+          ensures pp.name != oldName
+        {
+          assert Raw.LegalVariableName(pp.name);
+          reveal Raw.LegalVariableName;
+        }
+        var v := new LocalVariable(oldName, false, typ);
         oldInOut := Some(v);
-        paramMap := paramMap[Raw.OldName(p.name) := v];
+        paramMap := paramMap[oldName := v];
       } else {
         oldInOut := None;
       }

@@ -130,6 +130,39 @@ module Basics {
     Seq.Join(Seq.MapPartialFunction(f, s), separator)
   }
 
+  lemma CommonPrefixEquality<X>(prefix: seq<X>, a: seq<X>, b: seq<X>)
+    ensures prefix + a == prefix + b <==> a == b
+  {
+    if prefix == [] {
+      assert prefix + a == a;
+      assert prefix + b == b;
+    } else {
+      var p0, prefix' := prefix[0], prefix[1..];
+      calc {
+        a == b;
+        { CommonPrefixEquality(prefix', a, b); }
+        prefix' + a == prefix' + b;
+        {
+          calc {
+            prefix' + a == prefix' + b;
+          ==>
+            [p0] + (prefix' + a) == [p0] + (prefix' + b);
+          == { assert prefix + a == [p0] + (prefix' + a) && prefix + b == [p0] + (prefix' + b); }
+            prefix + a == prefix + b;
+          }
+          calc {
+            prefix + a == prefix + b;
+          ==>
+            (prefix + a)[1..] == (prefix + b)[1..];
+          == { assert (prefix + a)[1..] == prefix' + a && (prefix + b)[1..] == prefix' + b; }
+            prefix' + a == prefix' + b;
+          }
+        }
+        prefix + a == prefix + b;
+      }
+    }
+  }
+
   method SetToSeq<X>(s: set<X>) returns (r: seq<X>) {
     r := [];
     var t := s;

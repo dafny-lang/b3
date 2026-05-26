@@ -63,9 +63,6 @@ module ResolvedPrinter {
   }
 
   method TypeDecl(decl: TypeDecl, indent: nat) {
-    if decl.FromDomainSignature {
-      print "// ";
-    }
     print "type ", decl.Name, "\n";
   }
 

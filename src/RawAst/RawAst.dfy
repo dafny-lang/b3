@@ -222,18 +222,53 @@ module RawAst {
       None
   }
 
-  predicate LegalVariableName(name: string) {
+  opaque predicate LegalVariableName(name: string) {
     && name != []
     && !("_" <= name)
     && !(OldPrefix <= name)
     && name != "tag"
+    && name[0] != '.' && name[|name| - 1] != '.'
+    && !HasDoubleDot(name)
   }
 
   // This lemma gives easy ways to prove that a string is legal as a variable name.
   lemma SurelyLegalVariableName(name: string)
-    requires name != [] && name[0] == 's'
+    requires name != [] && name[0] == 's' && '.' !in name
     ensures LegalVariableName(name)
   {
+    AboutDoubleDot(name);
+    reveal LegalVariableName;
+  }
+
+  opaque predicate HasDoubleDot(name: string, j: nat := 0)
+    requires j <= |name|
+    decreases |name| - j
+  {
+    j + 2 <= |name| &&
+    (name[j] == '.' == name[j + 1] || HasDoubleDot(name, j + 1))
+  }
+
+  lemma AboutDoubleDot(name: string)
+    ensures HasDoubleDot(name) <==> exists i :: 0 <= i < |name| - 1 && name[i] == '.' == name[i + 1]
+  {
+    reveal HasDoubleDot;
+    if 2 <= |name| {
+      for j := 0 to |name| - 1
+        invariant HasDoubleDot(name) <==> HasDoubleDot(name, j)
+        invariant !exists i :: 0 <= i < j && name[i] == '.' == name[i + 1]
+      {
+        if name[j] == '.' == name[j + 1] {
+          return;
+        }
+      }
+    }
+  }
+
+  lemma ProveHasDoubleDot(name: string, i: nat)
+    requires 0 <= i < |name| - 1 && name[i] == '.' == name[i + 1]
+    ensures HasDoubleDot(name)
+  {
+    AboutDoubleDot(name);
   }
 
   // Statements
