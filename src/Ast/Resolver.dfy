@@ -25,7 +25,10 @@ module Resolver {
     requires forall param <- typeParameters :: Raw.LegalVariableName(param.Name)
     requires NamedDecl.Distinct(typeParameters)
     requires b3.signatureTypes == set param <- typeParameters :: param.Name
-    ensures r.Success? ==> b3.WellFormed(generatedTypes) && r.value.WellFormed() && NamedDecl.Distinct(typeParameters + r.value.types)
+    ensures r.Success? ==>
+      && b3.WellFormed(generatedTypes)
+      && r.value.WellFormed()
+      && NamedDecl.Distinct(typeParameters + r.value.types)
     decreases b3
   {
     generatedTypes := {};
@@ -71,7 +74,11 @@ module Resolver {
 
     var procMap, procedures :- ResolveAllProcedures(ers);
 
-    var r3 := Program(domains, types + instTypes, taggerFunctions + functions, generatedAxioms + axioms, procedures);
+    var r3 := Program(domains,
+      types + instTypes,
+      taggerFunctions + functions + instFunctions,
+      generatedAxioms + axioms + instAxioms,
+      procedures + instProcedures);
     assert NamedDecl.Distinct(typeParameters + (types + instTypes)) by {
       assert typeParameters + (types + instTypes) == (typeParameters + types) + instTypes;
       assert NamedDecl.Distinct(typeParameters + types);
@@ -88,6 +95,22 @@ module Resolver {
       assert forall i :: 0 <= i < |types + instTypes| ==> (types + instTypes)[i] == (typeParameters + (types + instTypes))[|typeParameters| + i];
     }
     DistinctConcat(taggerMap, taggerFunctions, functionMap, functions);
+    
+    assert NamedDecl.Distinct(taggerFunctions + functions + instFunctions) by {
+      var ff: seq<Function> := taggerFunctions + functions;
+      var fff: seq<Function> := taggerFunctions + functions + instFunctions;
+      assert NamedDecl.Distinct(ff); // by the call to DistinctConcat above
+      assume {:axiom} NamedDecl.Distinct(instFunctions); // TODO
+      assume {:axiom} forall f0 <- ff, f1 <- instFunctions :: f0.Name != f1.Name; // TODO
+    }
+    assume {:axiom} forall func <- instFunctions :: func.WellFormed();
+
+    assert NamedDecl.Distinct(procedures + instProcedures) by {
+      assert NamedDecl.Distinct(procedures);
+      assume {:axiom} NamedDecl.Distinct(instProcedures); // TODO
+      assume {:axiom} forall p0 <- procedures, p1 <- instProcedures :: p0.Name != p1.Name; // TODO
+    }
+    assume {:axiom} forall proc <- instProcedures :: proc.WellFormed();
 
     return Success(r3), generatedTypes;
   }
@@ -95,7 +118,9 @@ module Resolver {
   method ResolveAllDomains(b3: Raw.Program) returns (r: Result<map<string, Domain>, string>, domains: seq<Domain>)
     ensures r.Success? ==> var domainMap := r.value;
       && LinearForm(domainMap, domains)
-      && forall domainName <- domainMap :: domainMap[domainName].WellFormed()
+      && (forall domainName <- domainMap :: var domain := domainMap[domainName];
+        && domain.WellFormed()
+        && (forall func <- domain.members.functions :: func.SignatureWellFormed()))
     decreases b3, 0
   {
     var domainMap: map<string, Domain> := map[];
@@ -110,7 +135,9 @@ module Resolver {
       // connection between domainMap and domains
       invariant LinearForm(domainMap, domains)
       // domains are well-formed
-      invariant forall domainName <- domainMap :: domainMap[domainName].WellFormed()
+      invariant forall domainName <- domainMap :: var domain := domainMap[domainName];
+        && domain.WellFormed()
+        && (forall func <- domain.members.functions :: func.SignatureWellFormed())
     {
       var domain := b3.domains[n];
 

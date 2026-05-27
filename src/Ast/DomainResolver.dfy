@@ -12,6 +12,8 @@ module DomainResolver {
   // "typeArguments" are the resolved types corresponding to the type arguments of the RHS of the domain-instantiation declaration.
   datatype ResolvedInstantiation = ResolvedInstantiation(domain: Domain, selfTypeDecl: TypeDecl, typeArguments: seq<Type>) {
     predicate WellFormed() {
+      && (forall func <- domain.members.functions :: func.SignatureWellFormed())
+      && (forall axiom <- domain.members.axioms :: axiom.WellFormed())
       && Raw.LegalVariableName(selfTypeDecl.Name)
       && |domain.params| == |typeArguments|
       && NamedDecl.Distinct(domain.params + domain.members.types)
@@ -20,7 +22,9 @@ module DomainResolver {
 
   method ResolveDomainInstantiations(b3: Raw.Program, domainMap: map<string, Domain>, typeMap: map<string, TypeDecl>) returns (r: Result<seq<ResolvedInstantiation>, string>)
     requires forall i, j :: 0 <= i < j < |b3.types| ==> b3.types[i].name != b3.types[j].name
-    requires forall domainName <- domainMap :: domainMap[domainName].WellFormed()
+    requires forall domainName <- domainMap :: var domain := domainMap[domainName];
+      && domain.WellFormed()
+      && (forall func <- domain.members.functions :: func.SignatureWellFormed())
     requires forall typ <- b3.types :: typ.name in typeMap && Raw.LegalVariableName(typ.name)
     requires NameAlignment(typeMap)
     ensures r.Success? ==> var resolvedInstantiations := r.value;
@@ -72,7 +76,11 @@ module DomainResolver {
           assert selfTypeDecl.Name == b3.types[n].name;
           assert b3.types[j].name != b3.types[n].name;
         }
-        resolvedInstantiations := resolvedInstantiations + [ResolvedInstantiation(domain, selfTypeDecl, resolvedTypeArguments)];
+        var ri := ResolvedInstantiation(domain, selfTypeDecl, resolvedTypeArguments);
+        assert ri.WellFormed() by {
+          assume {:axiom} forall axiom <- domain.members.axioms :: axiom.WellFormed(); // TODO
+        }
+        resolvedInstantiations := resolvedInstantiations + [ri];
     }
 
     return Success(resolvedInstantiations);
@@ -83,15 +91,18 @@ module DomainResolver {
     requires forall i, j :: 0 <= i < j < |resolvedInstantiations| ==> resolvedInstantiations[i].selfTypeDecl.Name != resolvedInstantiations[j].selfTypeDecl.Name
     ensures NamedDecl.Distinct(instTypes)
     ensures forall typ <- instTypes :: Raw.HasDoubleDot(typ.Name)
+    ensures forall axiom <- instAxioms :: axiom.WellFormed()
   {
     instTypes, instFunctions, instAxioms, instProcedures := [], [], [], [];
     for i := 0 to |resolvedInstantiations|
       invariant forall typ <- instTypes :: Raw.HasDoubleDot(typ.Name)
       invariant forall typ <- instTypes :: exists j :: 0 <= j < i && HasPrefix(resolvedInstantiations[j].selfTypeDecl.Name, typ.Name)
       invariant NamedDecl.Distinct(instTypes)
+      invariant forall axiom <- instAxioms :: axiom.WellFormed()
     {
       var instantiation := resolvedInstantiations[i];
       assert instantiation.WellFormed();
+      assume {:axiom} forall func <- instantiation.domain.members.functions :: func.WellFormed(); // TODO
       var tt: seq<TypeDecl>, ff, aa, pp := DomainInstantiation.Instantiate(instantiation.domain, instantiation.selfTypeDecl, instantiation.typeArguments);
 
       // Prove the invariants about the new "tt"

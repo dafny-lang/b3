@@ -25,6 +25,7 @@ module Ast {
     provides Axiom.Explains, Axiom.Expr
     provides Variable.name, Variable.typ
     provides Variable.IsMutable, LocalVariable.IsMutable, PParameter.IsMutable, FParameter.IsMutable
+    provides Variable.Create, LocalVariable.Create, PParameter.Create, FParameter.Create
     provides AutoInvVariable.maybeAutoInv
     provides PParameter.mode, PParameter.oldInOut
     provides Label.Name
@@ -112,6 +113,9 @@ module Ast {
     predicate IsMutable()
 
     function DeclToString(): string
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
   }
 
   trait AutoInvVariable extends Variable {
@@ -180,6 +184,13 @@ module Ast {
 
     function DeclToString(): string {
       name + ": " + typ.ToString()
+    }
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
+    {
+      // TODO: oldInOut should also be recreated
+      v := new PParameter(name, mode, typ, oldInOut);
     }
   }
 
@@ -265,6 +276,12 @@ module Ast {
     function DeclToString(): string {
       (if injective then "injective " else "") + name + ": " + typ.ToString()
     }
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
+    {
+      v := new FParameter(name, injective, typ);
+    }
   }
 
   class Axiom extends DeclarationMarker {
@@ -286,7 +303,7 @@ module Ast {
   class LocalVariable extends AutoInvVariable {
     const isMutable: bool
     constructor (name: string, isMutable: bool, typ: Type)
-      ensures this.name == name && this.maybeAutoInv == None
+      ensures this.name == name && this.maybeAutoInv == None && this.typ == typ
     {
       this.name, this.isMutable, this.typ, this.maybeAutoInv := name, isMutable, typ, None;
     }
@@ -297,6 +314,12 @@ module Ast {
 
     function DeclToString(): string {
       (if isMutable then "var " else "val ") + name + ": " + typ.ToString()
+    }
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
+    {
+      v := new LocalVariable(name, isMutable, typ);
     }
   }
 

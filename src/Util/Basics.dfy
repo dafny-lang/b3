@@ -213,4 +213,9 @@ module Basics {
     else
       ""
   }
+
+  lemma AboutExtendedMapValues<X, Y>(m: map<X, Y>, x: X, y: Y)
+    ensures m[x := y].Values <= m.Values + {y}
+  {
+  }
 }
