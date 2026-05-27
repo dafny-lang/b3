@@ -1,0 +1,6 @@
+// RUN: %b3 resolve --rprint "%s" > "%t"
+// RUN: %diff "%s.expect" "%t"
+
+domain DT(X, Y) { }
+
+type MyDT := DT(int, int, bool) // error: wrong number of arguments

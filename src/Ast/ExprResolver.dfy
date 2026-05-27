@@ -12,10 +12,10 @@ module ExprResolver {
     provides ResolveExpr, ResolveExprList, ResolveMaybeExpr
     provides Wrappers, Raw, Ast, Types
 
-  datatype ExprResolverState = ExprResolverState(b3: Raw.Program, typeMap: map<string, TypeDecl>, functionMap: map<string, Function>)
+  datatype ExprResolverState = ExprResolverState(b3: Raw.Program, typeMap: map<string, TypeDecl>, ghost generatedTypes: set<string>, functionMap: map<string, Function>)
   {
     ghost predicate Valid() {
-      forall typename :: b3.IsType(typename) <==> typename in BuiltInTypes || typename in typeMap
+      forall typename :: b3.IsType(typename) || typename in generatedTypes <==> typename in BuiltInTypes || typename in typeMap
     }
   }
 

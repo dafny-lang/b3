@@ -3,7 +3,9 @@
 A _program_ consists of a list of top-level declarations. The order of these is irrelevant.
 
 ```
-Program ::=
+Program ::= MemberDecl*
+MemberDecl ::=
+  | Domain
   | TypeDecl
   | Tagger
   | Function
@@ -11,18 +13,24 @@ Program ::=
   | Procedure
 ```
 
-A program has three separate namespaces for top-level declarations: one is for types, another is
-for taggers and functions, and the third is for procedures. In other words, the language allows,
-for example, a procedure to have the same as a function.
+A program has several separate namespaces for top-level declarations: one is for types, one is
+for taggers and functions, one is for procedures, and one is for domains.
+In other words, the language allows, for example, a procedure to have the same as a function.
 
 ## Types
 
 ```
 TypeDecl ::=
-  type Identifier
+  type Identifier [ ":=" DomainInstantiation ]
+DomainInstantiation ::=
+  Identifier [ "(" Type*, ")" ]
 ```
 
 A declaration `type A` declares `A` to be a nonempty but otherwise uninterpreted type.
+
+A declaration `type A = D(T, U)` introduces a new type `A` and instantiates the domain `D`
+with types `T` and `U` to give additional member declarations. For any member `M` declare
+in domain `D`, the instantiated member gets the name `A/M`.
 
 There are three built-in types, `bool`, `int`, and `tag`. The use of a type is therefore
 
@@ -33,6 +41,36 @@ Type ::=
   | tag
   | Identifier
 ```
+
+## Domains
+
+```
+Domain ::=
+  domain Identifier [ "(" Identifier*, ")" ]
+  "{" MemberDecl* "}"
+```
+
+A _domain_ gives a way to group program declarations together into an instantiable unit.
+A domain can be parameterized by types, as represented by the identifiers in parentheses that
+follow the domain name in the declaration. These formal type parameters must be distinct
+from each other and distinct from the name of the domain.
+
+The domain's member declarations are resolved by themselves, as if they made up an entire
+B3 program, but with the addition of the domain name and its parameters as types. In other
+words, for a domain `D(X, Y)`, it is as if
+
+```
+type D
+type X
+type Y
+```
+
+are added to the given member declarations before those member declarations are resolved.
+Note, other than these types, the domain members cannot refer to anything declared outside
+the domain declaration.[^fn-domain-imports]
+
+[^fn-domain-imports]: if a need for this arises in the future, `domain` declaration will be
+    equipped with some kind of import mechanism
 
 (sec-taggers)=
 ## Taggers

@@ -5,8 +5,8 @@ Verifying Test ...
     b := 0
     c := 0
   m:
-    b := b
     a := a
+    b := b
     c := c
 ==== Incarnations: precondition of call
   nextSequenceCount:
@@ -15,8 +15,8 @@ Verifying Test ...
     c := 1
     inFormal := 0
   m:
-    inoutFormal := b
     inFormal := inFormal
+    inoutFormal := b
 ==== Incarnations: postcondition of call
   nextSequenceCount:
     a := 0
@@ -24,10 +24,10 @@ Verifying Test ...
     c := 1
     inFormal := 0
   m:
-    inoutFormal := b%0
-    outFormal := c%0
-    old!inoutFormal := b
     inFormal := inFormal
+    inoutFormal := b%0
+    old!inoutFormal := b
+    outFormal := c%0
 ==== Incarnations: after call
   nextSequenceCount:
     a := 0
@@ -35,7 +35,7 @@ Verifying Test ...
     c := 1
     inFormal := 0
   m:
-    b := b%0
     a := a
+    b := b%0
     c := c%0
 Verifying Callee ...

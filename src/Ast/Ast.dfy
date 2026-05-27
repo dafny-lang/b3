@@ -11,6 +11,7 @@ module Ast {
     reveals NamedDecl, NamedDecl.Distinct, TypeDecl, Type
     provides NamedDecl.Name, Type.ToString
     reveals Program, Type, Variable, Procedure, Label, PParameter, LocalVariable
+    reveals Domain, Domain.WellFormed
     reveals Expr, Operator, ParameterMode, AExpr, Location, Stmt, CallArgument
     reveals AutoInvVariable
     reveals Program.WellFormed, Procedure.WellFormed, PParameter.WellFormed, AExpr.WellFormed, Stmt.WellFormed, Expr.WellFormed, CallArgument.WellFormed
@@ -24,6 +25,7 @@ module Ast {
     provides Axiom.Explains, Axiom.Expr
     provides Variable.name, Variable.typ
     provides Variable.IsMutable, LocalVariable.IsMutable, PParameter.IsMutable, FParameter.IsMutable
+    provides Variable.Create, LocalVariable.Create, PParameter.Create, FParameter.Create
     provides AutoInvVariable.maybeAutoInv
     provides PParameter.mode, PParameter.oldInOut
     provides Label.Name
@@ -70,7 +72,18 @@ module Ast {
     }
   }
 
-  datatype Program = Program(types: seq<TypeDecl>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
+  // In a resolved Domain, "self" is a TypeDecl, because it is used as a type inside "members",
+  // as are the type parameters "params". When a domain is instantiated, the "self" type is replaced with a UserType
+  // corresponding to the LHS of the domain-instantiation declaration.
+  datatype Domain = Domain(self: TypeDecl, params: seq<TypeDecl>, members: Program)
+  {
+    ghost predicate WellFormed() {
+      NamedDecl.Distinct([self] + params + members.types)
+    }
+  }
+
+  // TODO: There is no reason for a resolved Program to contain domains (except possibly if a domain's procedures are to be verified exactly once).
+  datatype Program = Program(domains: seq<Domain>, types: seq<TypeDecl>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
   {
     predicate WellFormed()
       reads procedures, functions
@@ -100,6 +113,9 @@ module Ast {
     predicate IsMutable()
 
     function DeclToString(): string
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
   }
 
   trait AutoInvVariable extends Variable {
@@ -168,6 +184,13 @@ module Ast {
 
     function DeclToString(): string {
       name + ": " + typ.ToString()
+    }
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
+    {
+      // TODO: oldInOut should also be recreated
+      v := new PParameter(name, mode, typ, oldInOut);
     }
   }
 
@@ -253,6 +276,12 @@ module Ast {
     function DeclToString(): string {
       (if injective then "injective " else "") + name + ": " + typ.ToString()
     }
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
+    {
+      v := new FParameter(name, injective, typ);
+    }
   }
 
   class Axiom extends DeclarationMarker {
@@ -274,7 +303,7 @@ module Ast {
   class LocalVariable extends AutoInvVariable {
     const isMutable: bool
     constructor (name: string, isMutable: bool, typ: Type)
-      ensures this.name == name && this.maybeAutoInv == None
+      ensures this.name == name && this.maybeAutoInv == None && this.typ == typ
     {
       this.name, this.isMutable, this.typ, this.maybeAutoInv := name, isMutable, typ, None;
     }
@@ -285,6 +314,12 @@ module Ast {
 
     function DeclToString(): string {
       (if isMutable then "var " else "val ") + name + ": " + typ.ToString()
+    }
+
+    method Create(name: string, typ: Type) returns (v: Variable)
+      ensures v.name == name && v.typ == typ
+    {
+      v := new LocalVariable(name, isMutable, typ);
     }
   }
 

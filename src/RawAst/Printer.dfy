@@ -6,38 +6,81 @@ module Printer {
   import Types
 
   method Program(b3: Program) {
-    print "// B3 program\n";
+    print "// B3 program\n\n";
+    Members(b3, 0);
+  }
+
+  method Members(b3: Program, indent: nat) {
+    var omitIndent := true;
+
+    for i := 0 to |b3.domains| {
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      DomainDecl(b3.domains[i], indent);
+    }
+    
     for i := 0 to |b3.types| {
-      print "\n";
-      TypeDecl(b3.types[i]);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      TypeDecl(b3.types[i], indent);
     }
+
     for i := 0 to |b3.taggers| {
-      print "\n";
-      TaggerDecl(b3.taggers[i]);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      TaggerDecl(b3.taggers[i], indent);
     }
+
     for i := 0 to |b3.functions| {
-      print "\n";
-      FunctionDecl(b3.functions[i]);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      FunctionDecl(b3.functions[i], indent);
     }
+
     for i := 0 to |b3.axioms| {
-      print "\n";
-      AxiomDecl(b3.axioms[i]);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      AxiomDecl(b3.axioms[i], indent);
     }
+
     for i := 0 to |b3.procedures| {
-      print "\n";
-      Procedure(b3.procedures[i]);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      Procedure(b3.procedures[i], indent);
     }
   }
 
-  method TypeDecl(ty: Types.TypeName) {
-    print "type ", ty, "\n";
+  method IndentNewDeclaration(indent: nat, omitIndent: bool) returns (omitNextIndent: bool) {
+    if !omitIndent {
+      print "\n";
+    }
+    Indent(indent);
+    omitNextIndent := false;
   }
 
-  method TaggerDecl(tagger: Tagger) {
+  method DomainDecl(domain: Domain, indent: nat) {
+    print "domain ", domain.name;
+    if |domain.params| != 0 {
+      print "(", Comma(domain.params, ", "), ")";
+    }
+    print "\n";
+    Indent(indent, "{\n");
+    Members(domain.members, indent + IndentAmount);
+    Indent(indent, "}\n");
+  }
+
+  method TypeDecl(ty: TypeDecl, indent: nat) {
+    print "type ", ty.name;
+    match ty.domainInstantiation {
+      case None =>
+      case Some(instantiation) =>
+        print " := ", instantiation.name;
+        if instantiation.typeArguments != [] {
+          print "(", Comma(instantiation.typeArguments, ", "), ")";
+        }
+    }
+    print "\n";
+  }
+
+  method TaggerDecl(tagger: Tagger, indent: nat) {
     print "tagger ", tagger.name, " for ", tagger.typ, "\n";
   }
 
-  method FunctionDecl(func: Function) {
+  method FunctionDecl(func: Function, indent: nat) {
     print "function ", func.name, "(";
     var params := func.parameters;
     var sep := "";
@@ -55,20 +98,20 @@ module Printer {
     if func.definition.Some? {
       var FunctionDefinition(when, body) := func.definition.value;
       for i := 0 to |when| {
-        Indent(IndentAmount);
-        print "when ";
+        Indent(indent + IndentAmount, "when ");
         Expression(when[i]);
         print "\n";
       }
 
-      print "{\n";
-      Indent(IndentAmount);
-      Expression(body, format := MultipleLines(IndentAmount));
-      print "\n}\n";
+      Indent(indent, "{\n");
+      Indent(indent + IndentAmount);
+      Expression(body, format := MultipleLines(indent + IndentAmount));
+      print "\n";
+      Indent(indent, "}\n");
     }
   }
 
-  method AxiomDecl(axiom: Axiom) {
+  method AxiomDecl(axiom: Axiom, indent: nat) {
     print "axiom";
     var prefix := " explains ";
     for i := 0 to |axiom.explains| {
@@ -76,12 +119,12 @@ module Printer {
       prefix := ", ";
     }
     print "\n";
-    Indent(IndentAmount);
-    Expression(axiom.expr, format := MultipleLines(IndentAmount));
+    Indent(indent + IndentAmount);
+    Expression(axiom.expr, format := MultipleLines(indent + IndentAmount));
     print "\n";
   }
 
-  method Procedure(proc: Procedure) {
+  method Procedure(proc: Procedure, indent: nat) {
     print "procedure ", proc.name, "(";
     var params := proc.parameters;
     var sep := "";
@@ -93,12 +136,14 @@ module Printer {
     }
     print ")\n";
 
-    PrintAExprs(IndentAmount, "requires", proc.pre);
-    PrintAExprs(IndentAmount, "ensures", proc.post);
+    PrintAExprs(indent + IndentAmount, "requires", proc.pre);
+    PrintAExprs(indent + IndentAmount, "ensures", proc.post);
 
     match proc.body
     case None =>
-    case Some(stmt) => StmtAsBlock(stmt, 0);
+    case Some(stmt) =>
+      Indent(indent);
+      StmtAsBlock(stmt, indent);
   }
 
   method OptionalAutoInvariant(optionalAutoInv: Option<Expr>) {

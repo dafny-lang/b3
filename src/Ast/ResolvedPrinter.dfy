@@ -6,37 +6,67 @@ module ResolvedPrinter {
   import Types
 
   method Program(b3: Program) {
-    print "// Resolved B3 program\n";
+    print "// Resolved B3 program\n\n";
+    Members(b3, 0);
+  }
 
+  method Members(b3: Program, indent: nat) {
+    var omitIndent := true;
+
+    for i := 0 to |b3.domains| {
+      var domain := b3.domains[i];
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      DomainDecl(domain, indent);
+    }
+    
     for i := 0 to |b3.types| {
       var typ := b3.types[i];
-      print "\n";
-      TypeDecl(typ);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      TypeDecl(typ, indent);
     }
 
     for i := 0 to |b3.functions| {
       var func := b3.functions[i];
-      print "\n";
-      FunctionDecl(func);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      FunctionDecl(func, indent);
     }
 
     for i := 0 to |b3.axioms| {
-      print "\n";
-      AxiomDecl(b3.axioms[i]);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      AxiomDecl(b3.axioms[i], indent);
     }
 
     for i := 0 to |b3.procedures| {
       var proc := b3.procedures[i];
-      print "\n";
-      Procedure(proc);
+      omitIndent := IndentNewDeclaration(indent, omitIndent);
+      Procedure(proc, indent);
     }
   }
 
-  method TypeDecl(decl: TypeDecl) {
+  method IndentNewDeclaration(indent: nat, omitIndent: bool) returns (omitNextIndent: bool) {
+    if !omitIndent {
+      print "\n";
+    }
+    Indent(indent);
+    omitNextIndent := false;
+  }
+
+  method DomainDecl(domain: Domain, indent: nat) {
+    print "domain ", domain.self.Name;
+    if |domain.params| != 0 {
+      print "(", Comma(SeqMap(domain.params, (typeParam: TypeDecl) => typeParam.Name), ", "), ")";
+    }
+    print "\n";
+    Indent(indent, "{\n");
+    Members(domain.members, indent + IndentAmount);
+    Indent(indent, "}\n");
+  }
+
+  method TypeDecl(decl: TypeDecl, indent: nat) {
     print "type ", decl.Name, "\n";
   }
 
-  method FunctionDecl(func: Function) {
+  method FunctionDecl(func: Function, indent: nat) {
     print "function ", func.Name, "(";
     var params := func.Parameters;
     var sep := "";
@@ -54,20 +84,20 @@ module ResolvedPrinter {
     if func.Definition.Some? {
       var FunctionDefinition(when, body) := func.Definition.value;
       for i := 0 to |when| {
-        Indent(IndentAmount);
-        print "when ";
+        Indent(indent + IndentAmount, "when ");
         Expression(when[i]);
         print "\n";
       }
 
-      print "{\n";
-      Indent(IndentAmount);
-      Expression(body, format := MultipleLines(IndentAmount));
-      print "\n}\n";
+      Indent(indent, "{\n");
+      Indent(indent + IndentAmount);
+      Expression(body, format := MultipleLines(indent + IndentAmount));
+      print "\n";
+      Indent(indent, "}\n");
     }
   }
 
-  method AxiomDecl(axiom: Axiom) {
+  method AxiomDecl(axiom: Axiom, indent: nat) {
     print "axiom";
     var prefix := " explains ";
     for i := 0 to |axiom.Explains| {
@@ -75,12 +105,12 @@ module ResolvedPrinter {
       prefix := ", ";
     }
     print "\n";
-    Indent(IndentAmount);
-    Expression(axiom.Expr, format := MultipleLines(IndentAmount));
+    Indent(indent + IndentAmount);
+    Expression(axiom.Expr, format := MultipleLines(indent + IndentAmount));
     print "\n";
   }
 
-  method Procedure(proc: Procedure) {
+  method Procedure(proc: Procedure, indent: nat) {
     print "procedure ", proc.Name, "(";
     var params := proc.Parameters;
     var sep := "";
@@ -92,8 +122,8 @@ module ResolvedPrinter {
     }
     print ")\n";
 
-    PrintAExprs(IndentAmount, "requires", proc.Pre);
-    PrintAExprs(IndentAmount, "ensures", proc.Post);
+    PrintAExprs(indent + IndentAmount, "requires", proc.Pre);
+    PrintAExprs(indent + IndentAmount, "ensures", proc.Post);
 
     match proc.Body
     case None =>

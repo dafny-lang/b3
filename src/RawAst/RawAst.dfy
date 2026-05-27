@@ -6,8 +6,15 @@ module RawAst {
 
   // Top-level program
 
-  // A raw program reflects program that has been parsed.
-  datatype Program = Program(types: seq<TypeName>, taggers: seq<Tagger>, functions: seq<Function>, axioms: seq<Axiom>, procedures: seq<Procedure>)
+  // A raw program reflects a program that has been parsed.
+  datatype Program = Program(
+    signatureTypes: set<string>,
+    domains: seq<Domain>,
+    types: seq<TypeDecl>,
+    taggers: seq<Tagger>,
+    functions: seq<Function>,
+    axioms: seq<Axiom>,
+    procedures: seq<Procedure>)
   {
     // A raw program is well-formed when its identifiers resolve to declarations and some basic
     // properties hold:
@@ -20,15 +27,15 @@ module RawAst {
     //    - no duplication of actual out-going parameters
     //    - assignments only to mutable variables
     //    - additional semantic rules
-    predicate WellFormed() {
+    ghost predicate WellFormed(generatedTypes: set<string>) {
       // user-defined types do not use the names of built-in types
-      && (forall typ <- types :: typ !in BuiltInTypes)
+      && (forall typ <- types :: typ.name !in BuiltInTypes)
       // user-defined types have distinct names
       && (forall i, j :: 0 <= i < j < |types| ==> types[i] != types[j])
       // procedures have distinct names
       && (forall i, j :: 0 <= i < j < |procedures| ==> procedures[i].name != procedures[j].name)
       // procedure declarations are well-formed
-      && (forall proc <- procedures :: proc.WellFormed(this))
+      && (forall proc <- procedures :: proc.WellFormed(this, generatedTypes))
     }
 
     method FindProcedure(name: string) returns (r: Option<Procedure>) {
@@ -39,7 +46,37 @@ module RawAst {
     }
 
     predicate IsType(typ: TypeName) {
-      typ in BuiltInTypes || typ in types
+      typ in BuiltInTypes || typ in signatureTypes || exists t <- types :: typ == t.name
+    }
+  }
+
+  // Domains
+
+  datatype Domain = Domain(name: string, params: seq<string>, members: Program)
+  {
+    ghost predicate WellFormed(b3: Program, generatedTypes: set<string>) {
+      && members.signatureTypes == {name} + (set parameterTypeName <- params)
+      && members.WellFormed(generatedTypes)
+    }
+  }
+
+  // Domain instantiations
+
+  datatype DomainInstantiation = DomainInstantiation(name: string, typeArguments: seq<TypeName>)
+  {
+    predicate WellFormed(b3: Program) {
+      && (exists d <- b3.domains :: d.name == name && |d.params| == |typeArguments|)
+      && (forall typ <- typeArguments :: b3.IsType(typ))
+    }
+  }
+
+  // Type declarations and domain instantiations
+
+  datatype TypeDecl = TypeDecl(name: string, domainInstantiation: Option<DomainInstantiation>)
+  {
+    predicate WellFormed(b3: Program) {
+      && LegalVariableName(name)
+      && (domainInstantiation.Some? ==> domainInstantiation.value.WellFormed(b3))
     }
   }
 
@@ -56,15 +93,15 @@ module RawAst {
 
   datatype Function = Function(name: string, parameters: seq<FParameter>, resultType: TypeName, tag: Option<string>, definition: Option<FunctionDefinition>)
   {
-    predicate SignatureWellFormed(b3: Program) {
+    ghost predicate SignatureWellFormed(b3: Program, generatedTypes: set<string>) {
       // parameters have legal names and valid types
-      && (forall p <- parameters :: LegalVariableName(p.name) && b3.IsType(p.typ))
+      && (forall p <- parameters :: LegalVariableName(p.name) && (b3.IsType(p.typ) || p.typ in generatedTypes))
       // formal parameters have distinct names
       && FParameter.UniqueNames(parameters)
     }
 
-    predicate WellFormed(b3: Program) {
-      && SignatureWellFormed(b3)
+    ghost predicate WellFormed(b3: Program, generatedTypes: set<string>) {
+      && SignatureWellFormed(b3, generatedTypes)
       && match definition {
         case None => true
         case Some(def) =>
@@ -110,24 +147,24 @@ module RawAst {
       (set p <- parameters :: p.name) + (set p <- parameters | p.mode == InOut :: OldName(p.name))
     }
 
-    predicate SignatureWellFormed(b3: Program) {
+    ghost predicate SignatureWellFormed(b3: Program, generatedTypes: set<string>) {
       // parameters have legal names and valid types
-      && (forall p <- parameters :: LegalVariableName(p.name) && b3.IsType(p.typ))
+      && (forall p <- parameters :: LegalVariableName(p.name) && (b3.IsType(p.typ) || p.typ in generatedTypes))
       // formal parameters have distinct names
       && PParameter.UniqueNames(parameters)
       // set up the scopes: precondition, postcondition, body
       && var preScope := set p <- parameters | p.mode.IsIncoming() :: p.name;
       && var postScope := AllParameterNames();
       // pre- and postconditions are well-formed
-      && (forall ae <- pre :: ae.WellFormed(b3, preScope))
-      && (forall ae <- post :: ae.WellFormed(b3, postScope))
+      && (forall ae <- pre :: ae.WellFormed(b3, generatedTypes, preScope))
+      && (forall ae <- post :: ae.WellFormed(b3, generatedTypes, postScope))
     }
     
-    predicate WellFormed(b3: Program) {
-      && SignatureWellFormed(b3)
+    ghost predicate WellFormed(b3: Program, generatedTypes: set<string>) {
+      && SignatureWellFormed(b3, generatedTypes)
       // body, if any, is well-formed
       && var postScope := AllParameterNames();
-      && (body == None || body.value.WellFormed(b3, postScope, {}, false))
+      && (body == None || body.value.WellFormed(b3, generatedTypes, postScope, {}, false))
     }
   }
 
@@ -185,18 +222,53 @@ module RawAst {
       None
   }
 
-  predicate LegalVariableName(name: string) {
+  opaque predicate LegalVariableName(name: string) {
     && name != []
     && !("_" <= name)
     && !(OldPrefix <= name)
     && name != "tag"
+    && name[0] != '.' && name[|name| - 1] != '.'
+    && !HasDoubleDot(name)
   }
 
   // This lemma gives easy ways to prove that a string is legal as a variable name.
   lemma SurelyLegalVariableName(name: string)
-    requires name != [] && name[0] == 's'
+    requires name != [] && name[0] == 's' && '.' !in name
     ensures LegalVariableName(name)
   {
+    AboutDoubleDot(name);
+    reveal LegalVariableName;
+  }
+
+  opaque predicate HasDoubleDot(name: string, j: nat := 0)
+    requires j <= |name|
+    decreases |name| - j
+  {
+    j + 2 <= |name| &&
+    (name[j] == '.' == name[j + 1] || HasDoubleDot(name, j + 1))
+  }
+
+  lemma AboutDoubleDot(name: string)
+    ensures HasDoubleDot(name) <==> exists i :: 0 <= i < |name| - 1 && name[i] == '.' == name[i + 1]
+  {
+    reveal HasDoubleDot;
+    if 2 <= |name| {
+      for j := 0 to |name| - 1
+        invariant HasDoubleDot(name) <==> HasDoubleDot(name, j)
+        invariant !exists i :: 0 <= i < j && name[i] == '.' == name[i + 1]
+      {
+        if name[j] == '.' == name[j + 1] {
+          return;
+        }
+      }
+    }
+  }
+
+  lemma ProveHasDoubleDot(name: string, i: nat)
+    requires 0 <= i < |name| - 1 && name[i] == '.' == name[i + 1]
+    ensures HasDoubleDot(name)
+  {
+    AboutDoubleDot(name);
   }
 
   // Statements
@@ -265,21 +337,21 @@ module RawAst {
       case _ => false
     }
 
-    predicate WellFormed(b3: Program, scope: Scope, labels: set<string>, insideLoop: bool) {
+    predicate WellFormed(b3: Program, generatedTypes: set<string>, scope: Scope, labels: set<string>, insideLoop: bool) {
       match this
       case VarDecl(v, init, body) =>
         && LegalVariableName(v.name)
-        && (v.optionalType.Some? ==> b3.IsType(v.optionalType.value))
+        && (v.optionalType.Some? ==> b3.IsType(v.optionalType.value) || v.optionalType.value in generatedTypes)
         && (init.Some? ==> init.value.WellFormed(b3, scope))
         && (v.optionalType.Some? || init.Some?)
-        && body.WellFormed(b3, scope + {v.name}, labels, insideLoop)
+        && body.WellFormed(b3, generatedTypes, scope + {v.name}, labels, insideLoop)
       case Assign(lhs, rhs) =>
         && lhs in scope
         && rhs.WellFormed(b3, scope)
       case Reinit(vars) =>
         forall name <- vars :: name in scope
       case Block(stmts) =>
-        forall stmt <- stmts :: stmt.WellFormed(b3, scope, labels, insideLoop)
+        forall stmt <- stmts :: stmt.WellFormed(b3, generatedTypes, scope, labels, insideLoop)
       case Call(name, args) =>
         // the call goes to a procedure in the program
         exists proc <- b3.procedures | name == proc.name ::
@@ -299,26 +371,26 @@ module RawAst {
         cond.WellFormed(b3, scope)
       case AForall(name, typ, body) =>
         && LegalVariableName(name)
-        && b3.IsType(typ)
-        && body.WellFormed(b3, scope + {name}, labels, insideLoop)
+        && (b3.IsType(typ) || typ in generatedTypes)
+        && body.WellFormed(b3, generatedTypes, scope + {name}, labels, insideLoop)
       case Choose(branches) =>
         && |branches| != 0
-        && forall branch <- branches :: branch.WellFormed(b3, scope, labels, insideLoop)
+        && forall branch <- branches :: branch.WellFormed(b3, generatedTypes, scope, labels, insideLoop)
       case If(cond, thn, els) =>
         && cond.WellFormed(b3, scope)
-        && thn.WellFormed(b3, scope, labels, insideLoop)
-        && els.WellFormed(b3, scope, labels, insideLoop)
+        && thn.WellFormed(b3, generatedTypes, scope, labels, insideLoop)
+        && els.WellFormed(b3, generatedTypes, scope, labels, insideLoop)
       case IfCase(cases) =>
         && |cases| != 0
         && forall cs <- cases ::
             && cs.cond.WellFormed(b3, scope)
-            && cs.body.WellFormed(b3, scope, labels, insideLoop)
+            && cs.body.WellFormed(b3, generatedTypes, scope, labels, insideLoop)
       case Loop(invariants, body) =>
-        && (forall ae <- invariants :: ae.WellFormed(b3, scope))
-        && body.WellFormed(b3, scope, labels, true)
+        && (forall ae <- invariants :: ae.WellFormed(b3, generatedTypes, scope))
+        && body.WellFormed(b3, generatedTypes, scope, labels, true)
       case LabeledStmt(lbl, body) =>
         && lbl !in labels
-        && body.WellFormed(b3, scope, labels + {lbl}, insideLoop)
+        && body.WellFormed(b3, generatedTypes, scope, labels + {lbl}, insideLoop)
       case Exit(optionalLabel) =>
         match optionalLabel {
           case Some(lbl) => lbl in labels
@@ -343,12 +415,12 @@ module RawAst {
     | AExpr(e: Expr)
     | AAssertion(s: Stmt)
   {
-    predicate WellFormed(b3: Program, scope: Scope) {
+    predicate WellFormed(b3: Program, generatedTypes: set<string>, scope: Scope) {
       match this
       case AExpr(e) =>
         e.WellFormed(b3, scope)
       case AAssertion(s) =>
-        s.WellFormed(b3, scope, {}, false)
+        s.WellFormed(b3, generatedTypes, scope, {}, false)
     }
 
     ghost predicate Valid() {

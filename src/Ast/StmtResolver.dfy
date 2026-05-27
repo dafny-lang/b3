@@ -72,7 +72,7 @@ module StmtResolver {
 
   method ResolveStmt(stmt: Raw.Stmt, prs: ProcResolverState, ls: LocalResolverState) returns (result: Result<Stmt, string>)
     requires prs.Valid()
-    ensures result.Success? ==> stmt.WellFormed(prs.ers.b3, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
+    ensures result.Success? ==> stmt.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
     ensures result.Success? ==> result.value.WellFormed()
   {
     var r: Stmt;
@@ -134,7 +134,7 @@ module StmtResolver {
       case Block(stmts) =>
         var ss := [];
         for n := 0 to |stmts|
-          invariant forall stmt <- stmts[..n] :: stmt.WellFormed(prs.ers.b3, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
+          invariant forall stmt <- stmts[..n] :: stmt.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
           invariant forall stmt: Stmt <- ss :: stmt.WellFormed()
         {
           var s :- ResolveStmt(stmts[n], prs, ls);
@@ -180,7 +180,7 @@ module StmtResolver {
         var rbranches := [];
         for n := 0 to |branches|
           invariant forall branch <- branches[..n] ::
-            branch.WellFormed(prs.ers.b3, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
+            branch.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
           invariant forall branch: Stmt <- rbranches :: branch.WellFormed()
         {
           var rbranch :- ResolveStmt(branches[n], prs, ls);
@@ -204,7 +204,7 @@ module StmtResolver {
         for n := 0 to |cases|
           invariant forall cs <- cases[..n] ::
             && cs.cond.WellFormed(prs.ers.b3, ls.varMap.Keys)
-            && cs.body.WellFormed(prs.ers.b3, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
+            && cs.body.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
           invariant forall branch: Stmt <- branches :: branch.WellFormed()
         {
           var cond :- ResolveExpr(cases[n].cond, prs.ers, ls.varMap);
@@ -218,12 +218,12 @@ module StmtResolver {
         var loopLabel, ls' := ls.GenerateLoopLabel();
         var b :- ResolveStmt(body, prs, ls');
         r := LabeledStmt(loopLabel, Loop(invs, b));
-        assert stmt.WellFormed(prs.ers.b3, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?) by {
-          assert forall ae <- invariants :: ae.WellFormed(prs.ers.b3, ls.varMap.Keys);
+        assert stmt.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?) by {
+          assert forall ae <- invariants :: ae.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls.varMap.Keys);
           assert ls.varMap.Keys == ls'.varMap.Keys;
           assert ls.LabelSet() == ls'.LabelSet();
           assert ls'.loopLabel.Some?;
-          assert body.WellFormed(prs.ers.b3, ls'.varMap.Keys, ls'.LabelSet(), ls'.loopLabel.Some?);
+          assert body.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls'.varMap.Keys, ls'.LabelSet(), ls'.loopLabel.Some?);
         }
 
       case LabeledStmt(lbl, body) =>
@@ -261,7 +261,7 @@ module StmtResolver {
 
   method ResolveCallStmt(stmt: Raw.Stmt, prs: ProcResolverState, ls: LocalResolverState) returns (result: Result<Stmt, string>)
     requires stmt.Call? && prs.Valid()
-    ensures result.Success? ==> stmt.WellFormed(prs.ers.b3, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
+    ensures result.Success? ==> stmt.WellFormed(prs.ers.b3, prs.ers.generatedTypes, ls.varMap.Keys, ls.LabelSet(), ls.loopLabel.Some?)
     ensures result.Success? ==> result.value.WellFormed()
   {
     var Call(name, args) := stmt;
@@ -322,12 +322,12 @@ module StmtResolver {
 
   method ResolveAExprs(aexprs: seq<Raw.AExpr>, ers: ExprResolverState, ls: LocalResolverState) returns (r: Result<seq<AExpr>, string>)
     requires ers.Valid()
-    ensures r.Success? ==> forall ae <- aexprs :: ae.WellFormed(ers.b3, ls.varMap.Keys)
+    ensures r.Success? ==> forall ae <- aexprs :: ae.WellFormed(ers.b3, ers.generatedTypes, ls.varMap.Keys)
     ensures r.Success? ==> forall ae <- r.value :: ae.WellFormed()
   {
     var result := [];
     for n := 0 to |aexprs|
-      invariant forall ae <- aexprs[..n] :: ae.WellFormed(ers.b3, ls.varMap.Keys)
+      invariant forall ae <- aexprs[..n] :: ae.WellFormed(ers.b3, ers.generatedTypes, ls.varMap.Keys)
       invariant forall ae: AExpr <- result :: ae.WellFormed()
     {
       var ae :- ResolveAExpr(aexprs[n], ers, ls);
@@ -338,7 +338,7 @@ module StmtResolver {
 
   method ResolveAExpr(aexpr: Raw.AExpr, ers: ExprResolverState, ls: LocalResolverState) returns (r: Result<AExpr, string>)
     requires ers.Valid()
-    ensures r.Success? ==> aexpr.WellFormed(ers.b3, ls.varMap.Keys)
+    ensures r.Success? ==> aexpr.WellFormed(ers.b3, ers.generatedTypes, ls.varMap.Keys)
     ensures r.Success? ==> r.value.WellFormed()
   {
     match aexpr

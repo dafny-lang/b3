@@ -7,10 +7,11 @@ module PrintUtil {
     provides BindingPower.Init, BindingPower.EndlessOperator, BindingPower.SubexpressionPower
     provides Parenthesis, ParenthesisWrap
 
-  method Indent(indent: nat) {
+  method Indent(indent: nat, s: string := "") {
     for i := 0 to indent {
       print " ";
     }
+    print s;
   }
 
   const IndentAmount: nat := 2

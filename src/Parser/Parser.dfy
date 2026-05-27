@@ -19,8 +19,8 @@ module Parser {
   const TopLevel: B<Program> :=
     W.e_I(RepTill(parseTopLevelDecl.I_e(W), EOS)).M(
       decls =>
-        var (tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls);
-        Program(tt, gg, ff, aa, pp))
+        var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls);
+        Program({}, dd, tt, gg, ff, aa, pp))
 
   // ----- Parser helpers
 
@@ -139,11 +139,13 @@ module Parser {
   const customLiteralChar := identifierChar + "+-*/@#!^"
 
   const parseIdentifierChar: B<char> := CharTest((c: char) => c in identifierChar, "identifier character")
-  const parseIdentifierRaw: B<string> := // TODO: this should fail if the identifier is a keyword
+  const parseIdentifierRaw: B<string> :=
     CharTest((c: char) => c in canStartIdentifierChar, "identifier start character").Then(
       (c: char) =>
         parseIdentifierChar.Rep().M((s: string) => [c] + s))
-  const parseId: B<string> := parseIdentifierRaw.I_e(W)
+  // "parseId" parses the name of a user-defined symbol; "parseIdUse" parses the use of a (user-defined, built-in, or generated) symbol
+  const parseId: B<string> := parseIdentifierRaw.I_e(W) // TODO: this should fail if the identifier is a keyword or if it contains ".."
+  const parseIdUse: B<string> := parseIdentifierRaw.I_e(W)
 
   const parseCustomLiteralChar: B<char> := CharTest((c: char) => c in customLiteralChar, "custom literal character")
   const parseCustomLiteral: B<string> := parseCustomLiteralChar.Then((c: char) => parseCustomLiteralChar.Rep().M((s: string) => [c] + s))
@@ -185,34 +187,62 @@ module Parser {
   // ----- Top-level declarations
 
   datatype TopLevelDecl =
-    | TType(typeDecl: Types.TypeName)
+    | TDomain(domainDecl: Domain)
+    | TType(typeDecl: TypeDecl)
     | TTagger(taggerDecl: Tagger)
     | TFunction(funcDecl: Function)
     | TAxiom(axiomDecl: Axiom)
     | TProc(procDecl: Procedure)
 
-  const parseTopLevelDecl: B<TopLevelDecl> :=
+  const parseTopLevelDecl: B<TopLevelDecl> := RecMap(topLevelGallery, "decl")
+
+  function parseMemberDecl(c: TopLevelRecSel): B<TopLevelDecl> {
     Or([
+         parseDomainDecl(c).M(decl => TDomain(decl)),
          parseTypeDecl.M(decl => TType(decl)),
          parseTaggerDecl.M(decl => TTagger(decl)),
          parseFunctionDecl.M(decl => TFunction(decl)),
          parseAxiomDecl.M(decl => TAxiom(decl)),
          parseProcDecl.M(decl => TProc(decl))
        ])
-
-  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Types.TypeName>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
-    if decls == [] then ([], [], [], [], []) else
-      var (tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls[1..]);
-      match decls[0]
-      case TType(decl) => ([decl] + tt, gg, ff, aa, pp)
-      case TTagger(decl) => (tt, [decl] + gg, ff, aa, pp)
-      case TFunction(decl) => (tt, gg, [decl] + ff, aa, pp)
-      case TAxiom(decl) => (tt, gg, ff, [decl] + aa, pp)
-      case TProc(decl) => (tt, gg, ff, aa, [decl] + pp)
   }
 
-  const parseTypeDecl: B<Types.TypeName> :=
-    T("type").e_I(parseId)
+  function SeparateTopLevelDecls(decls: seq<TopLevelDecl>): (seq<Domain>, seq<TypeDecl>, seq<Tagger>, seq<Function>, seq<Axiom>, seq<Procedure>) {
+    if decls == [] then ([], [], [], [], [], []) else
+      var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(decls[1..]);
+      match decls[0]
+      case TDomain(decl) => ([decl] + dd, tt, gg, ff, aa, pp)
+      case TType(decl) => (dd, [decl] + tt, gg, ff, aa, pp)
+      case TTagger(decl) => (dd, tt, [decl] + gg, ff, aa, pp)
+      case TFunction(decl) => (dd, tt, gg, [decl] + ff, aa, pp)
+      case TAxiom(decl) => (dd, tt, gg, ff, [decl] + aa, pp)
+      case TProc(decl) => (dd, tt, gg, ff, aa, [decl] + pp)
+  }
+
+  function parseDomainDecl(c: TopLevelRecSel): B<Domain> {
+    T("domain").e_I(parseId).Then(name =>
+      parseParenthesized(parseCommaDelimitedSeq(parseId)).Option().Then((maybeParams: Option<seq<string>>) =>
+        var parameters :=
+          match maybeParams
+          case None => []
+          case Some(ids) => ids;
+        Sym("{").e_I(c("decl").Rep()).I_e(Sym("}")).M(members =>
+          var (dd, tt, gg, ff, aa, pp) := SeparateTopLevelDecls(members);
+          var domainBody := Program({name} + (set parameterTypeName <- parameters), dd, tt, gg, ff, aa, pp);
+          Domain(name, parameters, domainBody)
+        )
+    ))
+  }
+
+  const parseTypeDecl: B<TypeDecl> :=
+    T("type").e_I(parseId).I_I(Sym(":=").e_I(parseInstantiation).Option()).M2(MId, (name, maybeInstantiation) => TypeDecl(name, maybeInstantiation))
+
+  const parseInstantiation: B<DomainInstantiation> :=
+    parseId.Then(name =>
+      parseParenthesized(parseCommaDelimitedSeq(parseType)).Option().M((maybeArguments: Option<seq<Types.TypeName>>) =>
+        var typeArguments := if maybeArguments == None then [] else maybeArguments.value;
+        DomainInstantiation(name, typeArguments)
+    ))
 
   const parseTaggerDecl: B<Tagger> :=
     T("tagger").e_I(parseId).I_e(T("for")).I_I(parseType).M2(MId, (name, typeName) => Tagger(name, typeName))
@@ -221,7 +251,7 @@ module Parser {
     T("function").e_I(parseId).Then(name =>
       parseParenthesized(parseCommaDelimitedSeq(parseFunctionFormal)).Then(formals =>
         Sym(":").e_I(parseType).Then(resultType =>
-          T("tag").e_I(parseId).Option().Then(maybeTag =>
+          T("tag").e_I(parseIdUse).Option().Then(maybeTag =>
             parseFunctionDefinition.Option().M(maybeDefinition =>
               Function(name, formals, resultType, maybeTag, maybeDefinition)
     )))))
@@ -239,7 +269,7 @@ module Parser {
 
   const parseAxiomDecl: B<Axiom> :=
     T("axiom")
-    .e_I(T("explains").e_I(parseNonemptyCommaDelimitedSeq(parseId)).Option())
+    .e_I(T("explains").e_I(parseNonemptyCommaDelimitedSeq(parseIdUse)).Option())
     .I_I(parseExpr).M2(MId, (explains, expr) => Axiom(if explains == None then [] else explains.value, expr))
 
   const parseProcDecl: B<Procedure> :=
@@ -287,13 +317,19 @@ module Parser {
       T("bool"),
       T("int"),
       T("tag"),
-      parseId
+      parseIdUse
     ])
 
   // ----- Parsing gallery
 
+  type TopLevelRecSel = RecMapSel<TopLevelDecl>
   type StmtRecSel = RecMapSel<Stmt>
   type ExprRecSel = RecMapSel<Expr>
+
+  const topLevelGallery: map<string, RecMapDef<TopLevelDecl>> :=
+    map[
+      "decl" := RecMapDef(0, (c: TopLevelRecSel) => parseMemberDecl(c))
+    ]
 
   const stmtGallery: map<string, RecMapDef<Stmt>> :=
     map[
@@ -320,7 +356,7 @@ module Parser {
     Or([
          T("var").e_I(parseVariableDeclaration(true, c)),
          T("val").e_I(parseVariableDeclaration(false, c)),
-         T("reinit").e_I(parseNonemptyCommaDelimitedSeq(parseId)).M(ids => Reinit(ids)),
+         T("reinit").e_I(parseNonemptyCommaDelimitedSeq(parseIdUse)).M(ids => Reinit(ids)),
          T("exit").e_I(parseOptionalExitArgument()).M(optionalLabel => Exit(optionalLabel)),
          T("return").M(_ => Return),
          T("check").e_I(parseExpr).M(e => Check(e)),
@@ -333,9 +369,9 @@ module Parser {
          T("choose").e_I(c("block")).I_I(T("or").e_I(c("block")).Rep()).M2(MId, (s, ss) => Choose([s] + ss)),
          T("if").e_I(parseIfCont(c)),
          c("loop"),
-         Atomic(parseId.I_e(Sym(":="))).I_I(parseExpr).M2(MId, (lhs, rhs) => Assign(lhs, rhs)),
+         Atomic(parseIdUse.I_e(Sym(":="))).I_I(parseExpr).M2(MId, (lhs, rhs) => Assign(lhs, rhs)),
          Atomic(parseId.I_e(Sym(":"))).I_I(Or([c("block"), c("loop")])).M2(MId, (lbl, stmt) => LabeledStmt(lbl, stmt)),
-         Atomic(parseId.I_e(Sym("("))).I_I(parseCommaDelimitedSeq(parseCallArgument)).I_e(Sym(")")).M2(MId, (name, args) => Call(name, args))
+         Atomic(parseIdUse.I_e(Sym("("))).I_I(parseCommaDelimitedSeq(parseCallArgument)).I_e(Sym(")")).M2(MId, (name, args) => Call(name, args))
        ])
   }
 
@@ -352,8 +388,8 @@ module Parser {
     T("autoinv").e_I(parseExpr).Option()
 
   function parseOptionalExitArgument(): B<Option<string>> {
-    Lookahead(parseId.I_e(Or([Sym(":="), Sym(":"), Sym("(")]))).Then((maybe: Option<string>) =>
-                                                                       if maybe.Some? then Nothing.M(_ => None) else parseId.Option()
+    Lookahead(parseIdUse.I_e(Or([Sym(":="), Sym(":"), Sym("(")]))).Then((maybe: Option<string>) =>
+      if maybe.Some? then Nothing.M(_ => None) else parseIdUse.Option()
     )
   }
 
@@ -385,8 +421,8 @@ module Parser {
 
   const parseCallArgument: B<CallArgument> :=
     Or([
-         T("out").e_I(parseId).M(name => CallArgument(ParameterMode.Out, IdExpr(name))),
-         T("inout").e_I(parseId).M(name => CallArgument(ParameterMode.InOut, IdExpr(name))),
+         T("out").e_I(parseIdUse).M(name => CallArgument(ParameterMode.Out, IdExpr(name))),
+         T("inout").e_I(parseIdUse).M(name => CallArgument(ParameterMode.InOut, IdExpr(name))),
          parseExpr.M(e => CallArgument(ParameterMode.In, e))
        ])
 
@@ -579,8 +615,8 @@ module Parser {
       T("true").M(_ => BLiteral(true)),
       Nat.I_e(W).M(n => ILiteral(n)),
       Sym("|").e_I(parseCustomLiteral).I_e(Sym(":")).I_I(parseType).I_e(Sym("|")).M2(MId, (lit, typ) => CustomLiteral(lit, typ)),
-      T("old").e_I(parseId).M(name => IdExpr(name, true)),
-      parseId.Then(name =>
+      T("old").e_I(parseIdUse).M(name => IdExpr(name, true)),
+      parseIdUse.Then(name =>
         Or([
           Sym("(").e_I(parseCommaDelimitedSeq(c("expr"))).I_e(Sym(")"))
             .M(args => FunctionCallExpr(name, args)),
